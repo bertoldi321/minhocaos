@@ -1,0 +1,10 @@
+{
+  "name": "minhocaos",
+  "version": "5.0.0",
+  "description": "Minhocaos: jogo de minhocas multiplayer com servidor próprio",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}

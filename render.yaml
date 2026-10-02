@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: minhocaos
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: echo "sem dependencias"
+    startCommand: node server.js
+    healthCheckPath: /health

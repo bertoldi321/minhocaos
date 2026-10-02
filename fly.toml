@@ -1,0 +1,30 @@
+# Troque "minhocaos" por um nome livre se o Fly disser que já existe.
+# Use UMA máquina só (fly launch --ha=false / fly scale count 1): com duas, os amigos caem em partidas diferentes.
+app = "minhocaos"
+primary_region = "gru"
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 200
+    hard_limit = 250
+
+[checks]
+  [checks.health]
+    type = "http"
+    port = 8080
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
