@@ -166,6 +166,37 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
   #toasts{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 128px)}
 }
 @media (max-height:520px){.board li:nth-child(n+4):not(.me):not(.fr){display:none}.mm{width:88px;height:88px}}
+/* tela de morte */
+.ban{position:relative;width:min(500px,100%);background:#fff;color:#1c1e21;border-radius:8px;box-shadow:0 12px 28px rgba(0,0,0,.4),0 2px 4px rgba(0,0,0,.2);overflow:hidden;font-family:Helvetica,Arial,system-ui,sans-serif;-webkit-user-select:text;user-select:text}
+.ban-x{position:absolute;right:8px;top:6px;width:34px;height:34px;border:0;background:transparent;font-size:28px;line-height:1;color:#606770;border-radius:50%;z-index:1}
+.ban-x:hover{background:#f0f2f5}
+.ban-img{display:block;width:100%;height:auto;margin-top:26px}
+.ban-body{padding:6px 16px 16px}
+.ban-title{margin:6px 0 4px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px}
+.ban-title svg{width:16px;height:16px;flex:none}
+.ban-sub{margin:0;font-size:14px;color:#606770}
+.ban #overCause{margin:14px 0 0;font-size:13px;color:#1c1e21}
+.ban-stats{margin:4px 0 0;font-size:12.5px;color:#606770}
+.ban-stats b{color:#1c1e21;font-variant-numeric:tabular-nums}
+.ban-rec{margin:4px 0 0;font-size:12.5px;color:#606770}
+.ban-rec.new{color:#1a7f37;font-weight:700}
+.ban-actions{display:flex;justify-content:flex-end;margin-top:16px}
+.ban-btn{border:0;border-radius:6px;background:#1877f2;color:#fff;font:600 15px Helvetica,Arial,system-ui,sans-serif;padding:10px 16px;text-align:center}
+.ban-btn:hover{background:#166fe5}
+/* clarão com texto (Native Swipe / Native King) */
+#flash{position:fixed;inset:0;z-index:8;pointer-events:none;display:grid;place-items:center;opacity:0;--fc:#b9a7ff}
+#flash::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,#fff 0%,var(--fc) 35%,transparent 75%)}
+#flash.go{animation:flashA 1.4s ease-out}
+#flash.go::before{animation:flashB 1.4s ease-out forwards}
+#flashText{position:relative;font:400 clamp(46px,11vw,140px)/1 var(--display);color:#fff;letter-spacing:.01em;text-align:center;padding:0 16px;text-shadow:0 0 28px var(--fc),0 0 60px var(--fc),0 6px 0 rgba(0,0,0,.35)}
+#flash.go #flashText{animation:flashC 1.4s ease-out}
+@keyframes flashA{0%{opacity:0}6%{opacity:1}72%{opacity:1}100%{opacity:0}}
+@keyframes flashB{0%{opacity:.95}18%{opacity:.35}100%{opacity:0}}
+@keyframes flashC{0%{transform:scale(.6)}18%{transform:scale(1.08)}30%{transform:scale(1)}100%{transform:scale(1.04)}}
+/* ping e fps */
+.perf{position:fixed;left:12px;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:9;pointer-events:none;font:600 12px/1 var(--ui);font-variant-numeric:tabular-nums;color:var(--ink-dim);background:rgba(12,7,15,.55);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+.perf b{font-weight:700}
+.perf .ok{color:var(--live)}.perf .mid{color:var(--wait)}.perf .bad{color:#ff6b6b}
 @media (prefers-reduced-motion:reduce){.logo span{animation:none}.toast{animation:none}.ndot.wait{animation:none}}
 </style>
 </head>
@@ -224,23 +255,22 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 </section>
 
 <section id="over" class="screen" hidden>
-  <div class="over panel">
-    <p class="eyebrow">Fim da rodada</p>
-    <h2>Virou adubo!</h2>
-    <p id="overCause"></p>
-    <dl class="stats-grid">
-      <div><dt>Maior tamanho</dt><dd id="sMax">0</dd></div>
-      <div><dt>Abates</dt><dd id="sKills">0</dd></div>
-      <div><dt>Tempo vivo</dt><dd id="sTime">0:00</dd></div>
-      <div><dt>Melhor posição</dt><dd id="sRank">—</dd></div>
-    </dl>
-    <p class="record" id="sRecord"></p>
-    <div class="actions">
-      <button class="play" id="againBtn" type="button">Jogar de novo</button>
-      <button class="ghost-btn" id="menuBtn" type="button">Trocar minhoca</button>
+  <div class="ban" role="dialog" aria-labelledby="banTitle">
+    <button class="ban-x" id="menuBtn" type="button" aria-label="Trocar minhoca" title="Trocar minhoca">&times;</button>
+    <img class="ban-img" src="/restricao.png" alt="" width="498" height="240">
+    <div class="ban-body">
+      <p class="ban-title" id="banTitle"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 7V5.5a3 3 0 0 1 6 0V7h.5A1.5 1.5 0 0 1 13 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7H5zm1.5 0h3V5.5a1.5 1.5 0 0 0-3 0V7z" fill="#dd3b1c"/></svg>Você está com restrições para anunciar</p>
+      <p class="ban-sub">Você não pode veicular anúncios ou gerenciar contas de anúncios.</p>
+      <p class="ban-cause" id="overCause"></p>
+      <p class="ban-stats">Tamanho <b id="sMax">0</b> · Abates <b id="sKills">0</b> · Tempo <b id="sTime">0:00</b> · Melhor posição <b id="sRank">—</b></p>
+      <p class="ban-rec" id="sRecord"></p>
+      <div class="ban-actions"><button class="ban-btn" id="againBtn" type="button">Compre BM com o Marcos, e comece novamente</button></div>
     </div>
   </div>
 </section>
+
+<div id="flash" aria-hidden="true"><span id="flashText"></span></div>
+<div id="perf" class="perf" aria-hidden="true"></div>
 
 <script>
 (() => {
@@ -952,7 +982,11 @@ function step(dt, now) {
       if (placeWorm(w, w.isMe ? rtM : rtO)) { w.seen = true; w.lastIn = newest; }
       else if (w.seen && newest - w.lastIn > 3000) dropWorm(w);
     }
-    if (me && me.alive) { stats.maxMass = Math.max(stats.maxMass, me.mass); stats.kills = me.kills; }
+    if (me && me.alive) {
+      stats.maxMass = Math.max(stats.maxMass, me.mass); stats.kills = me.kills;
+      const k = Math.floor(me.mass / 1000);              // a cada 1.000 pontos
+      if (state === 'play' && k > milestone) { milestone = k; flash('Native Swipe', '#b9a7ff'); }
+    }
   }
   control(now);
   updateFood(dt);
@@ -997,6 +1031,26 @@ function drawIcon(k, x, y, size, col) {
   else { ctx.strokeStyle = col; ctx.lineWidth = 2.3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(P2D[k]); }
   ctx.restore();
 }
+let topWorm = null;
+function drawCrown(x, y, r) {
+  // coroa do número 1, em pé em cima da cabeça
+  const s = r * 2;
+  ctx.save(); ctx.translate(x, y - r * 1.2);
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .55;
+  const gs = s * 1.1; ctx.drawImage(glowSprite('#ffd23f'), -gs, -gs * .9, gs * 2, gs * 2);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.moveTo(-s * .5, s * .16); ctx.lineTo(-s * .58, -s * .3); ctx.lineTo(-s * .26, -s * .04); ctx.lineTo(0, -s * .46);
+  ctx.lineTo(s * .26, -s * .04); ctx.lineTo(s * .58, -s * .3); ctx.lineTo(s * .5, s * .16); ctx.closePath();
+  const g = ctx.createLinearGradient(0, -s * .46, 0, s * .16);
+  g.addColorStop(0, '#fff3b0'); g.addColorStop(.5, '#ffd23f'); g.addColorStop(1, '#d9930d');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, s * .06); ctx.lineJoin = 'round'; ctx.strokeStyle = '#7a4a05'; ctx.stroke();
+  ctx.fillStyle = '#ff4a6e'; dot(0, -s * .02, s * .07);
+  ctx.fillStyle = '#5ce1e6'; dot(-s * .3, s * .05, s * .05); dot(s * .3, s * .05, s * .05);
+  ctx.fillStyle = '#fff8d6'; dot(-s * .58, -s * .3, s * .055); dot(0, -s * .46, s * .06); dot(s * .58, -s * .3, s * .055);
+  ctx.restore();
+}
 function drawWorm(w) {
   const r = radiusOf(w.mass), pts = w.pts, n = pts.length, frozen = w.frozen > 0, cols = frozen ? ICE : w.powers.veneno ? TOXIC : w.skin, cl = cols.length, m = r * 3;
   let head = true;
@@ -1039,6 +1093,7 @@ function drawWorm(w) {
     ctx.fillStyle = '#fffaf3'; dot(ex, ey, r * .34);
     ctx.fillStyle = frozen ? '#3a6f86' : '#160c18'; dot(ex + lc * r * .12, ey + ls * r * .12, r * .19);
   }
+  if (w === topWorm) drawCrown(w.x, w.y, r);
   if (w.powers.cego) {
     // venda nos olhos
     const bx = w.x + ca * r * .32, by = w.y + sa * r * .32;
@@ -1147,6 +1202,8 @@ function render() {
     drawIcon(o.type, o.x, y, R * 1.15, col);
   }
 
+  topWorm = null;
+  for (const w of worms.values()) if (w.alive && w.seen && (!topWorm || w.mass > topWorm.mass)) topWorm = w;
   for (const w of worms.values()) if (w.alive && w.seen && w !== me) drawWorm(w);
   if (me && me.alive && me.seen) drawWorm(me);
   for (const f of fires.values()) drawFire(f);
@@ -1243,6 +1300,7 @@ const el = {
   menu: $('#menu'), over: $('#over'), name: $('#name'), soundBtn: $('#soundBtn'), playBtn: $('#playBtn'),
   netLine: $('#netLine'), netLineText: $('#netLineText'), roomRow: $('#roomRow'), roomName: $('#roomName'), copyLink: $('#copyLink'), roomLink: $('#roomLink'),
   ndot: $('#ndot'), netText: $('#netText'), friends: $('#friends'), netNote: $('#netNote'),
+  flash: $('#flash'), flashText: $('#flashText'), perf: $('#perf'),
 };
 let lastToast = '', lastToastAt = 0;
 function toast(html, col) {
@@ -1291,10 +1349,12 @@ function updateBoard() {
     el.len.textContent = fmt(me.mass);
     el.rank.textContent = `${myRank > 0 ? myRank : '–'}º de ${alive.length} · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}`;
     if (myRank > 0) stats.bestRank = Math.min(stats.bestRank, myRank);
+    if (myRank === 1 && lastRank !== 1 && alive.length > 1 && time - kingT > 8) { kingT = time; flash('Native King', '#ffd23f'); }
+    lastRank = myRank;
   }
   const n = othersOnline().length;
   el.netLine.hidden = conn !== 'online';
-  el.netLineText.textContent = (n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} na toca` : 'Só você na toca') + (rtt ? ` · ${rtt} ms` : '');
+  el.netLineText.textContent = n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} na toca` : 'Só você na toca';
 }
 let hudT = 0, mmT = 0, lobbyT = 0;
 function hud(dt) {
@@ -1343,7 +1403,14 @@ function requestPlay() {
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send({ t: 'play', n: myName(), k: skinStr(SKINS[skinIdx].c) });
 }
+let lastRank = 99, kingT = -99, milestone = 0;
+function flash(text, col) {
+  el.flashText.textContent = text; el.flash.style.setProperty('--fc', col);
+  el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
+  sfx('power');
+}
 function startPlaying() {
+  lastRank = 99; milestone = 0;
   stats = { start: time, end: 0, bestRank: 99, maxMass: 30, kills: 0 }; death = null; myPowers = {};
   state = 'play'; input.aim = false; wantAngle = null; lastSent = { a: null, b: null, t: 0 };
   el.menu.hidden = true; el.over.hidden = true; el.hud.hidden = false;
@@ -1441,8 +1508,17 @@ if (/[?&]debug\b/.test(location.search)) {
     get stats() { return stats; }, get snaps() { return snaps.length; } };
 }
 let last = performance.now();
+let fpsN = 0, fpsT = 0;
+function perfTick(raw) {
+  fpsN++; fpsT += raw;
+  if (fpsT < .5) return;
+  const fps = Math.round(fpsN / fpsT); fpsN = 0; fpsT = 0;
+  const pc = !rtt ? '' : rtt < 70 ? 'ok' : rtt < 140 ? 'mid' : 'bad', fc = fps >= 50 ? 'ok' : fps >= 30 ? 'mid' : 'bad';
+  el.perf.innerHTML = `ping <b class="${pc}">${rtt || '–'}</b> ms · <b class="${fc}">${fps}</b> fps`;
+}
 function frame(now) {
-  const dt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+  const raw = Math.max(0, (now - last) / 1000), dt = Math.min(.05, raw); last = now;
+  perfTick(raw);
   requestAnimationFrame(frame);
   try {
     step(dt, now);

@@ -36,7 +36,11 @@ const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
 /* bolas de fogo: saem da cabeça de quem pegou o poder, se espalham e ficam paradas queimando */
 const FB_N = 6, FB_R = 22, FB_TTL = 10, FB_FLY = .5, FB_MIN = 150, FB_MAX = 330, MAX_FB = 150;
-const NECK = 4;                                    // gomos logo atrás da cabeça: contam como cabeça com cabeça
+const NECK = 4;
+/* bot da casa: sempre tem um "Native Bot" na toca enquanto houver gente conectada */
+const BOT_NAME = 'Native Bot', BOT_SKIN = '1877f2ffffff', BOT_RESPAWN = 3;
+const BAD_ORB = { lento: 1, cego: 1, veneno: 1 };
+const BOT_OFFS = [0, .35, -.35, .7, -.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, 3];                                    // gomos logo atrás da cabeça: contam como cabeça com cabeça
 const CELL = 64, GN = Math.ceil(WORLD_R * 2 / CELL) + 5;
 const FCELL = 128, FGN = Math.ceil(WORLD_R * 2 / FCELL) + 5;
 
@@ -108,6 +112,7 @@ class Room {
     this.fgrid = Array.from({ length: FGN * FGN }, () => []);          // grade fixa das bolinhas: só muda quando alguém come
     for (let i = 0; i < FOOD_N; i++) this.fAdd(this.slots[i]);
     this.emptySince = Date.now(); this.rosterT = 0;
+    this.bot = null; this.botT = 1;
   }
   gCell(v) { const c = Math.floor((v + WORLD_R) / CELL) + 2; return c >= 0 ? (c < GN ? c : GN - 1) : 0; }
   fCell(v) { const c = Math.floor((v + WORLD_R) / FCELL) + 2; return c >= 0 ? (c < FGN ? c : FGN - 1) : 0; }
@@ -232,7 +237,79 @@ class Room {
       if (w.client && w.client.worm === w) { w.client.worm = null; changed = true; }
     }
     if (changed) this.sendRoster();
+    if (this.bot && this.bot.alive) this.botThink(this.bot, list);
+    else if (this.clients.size && (this.botT -= dt) <= 0) this.spawnBot();
     if (this.tick % SEND_EVERY === 0) this.broadcast();
+  }
+
+  /* ---------- Native Bot ---------- */
+  spawnBot() {
+    const p = this.safeSpot(), ang = Math.atan2(-p.y, -p.x);
+    const w = { id: this.nextWorm++, name: BOT_NAME, skin: BOT_SKIN, cols: BOT_SKIN.match(/.{6}/g), x: p.x, y: p.y, angle: ang, target: ang,
+      wantBoost: false, boosting: false, mass: 60, pts: [], powers: {}, frozen: 0, drop: 0, kills: 0, alive: true, client: null, bot: true, think: 0, wander: ang };
+    const sp = radiusOf(w.mass) * .55, n = segCount(w.mass);
+    for (let i = 1; i <= n; i++) w.pts.push({ x: w.x - Math.cos(ang) * sp * i, y: w.y - Math.sin(ang) * sp * i });
+    this.worms.set(w.id, w); this.bot = w; this.botT = BOT_RESPAWN;
+    this.events.push(['n', w.id, w.name, w.skin]);
+  }
+  // decide para onde o bot vai (roda depois das colisões, com a grade do passo atual)
+  botThink(w, list) {
+    if (--w.think > 0) return;
+    w.think = 4;
+    const r = radiusOf(w.mass);
+    let desired = w.wander;
+    if (w.x * w.x + w.y * w.y > (WORLD_R * .8) ** 2) desired = Math.atan2(-w.y, -w.x);
+    else {
+      let best = null, bs = 0;
+      for (const o of this.orbs) {
+        if (this.time < o.born || BAD_ORB[o.type]) continue;
+        const d = Math.hypot(o.x - w.x, o.y - w.y);
+        if (d < 520 && 4 / (d + 60) > bs) { bs = 4 / (d + 60); best = o; }
+      }
+      const R = 320, x0 = this.fCell(w.x - R), x1 = this.fCell(w.x + R), y0 = this.fCell(w.y - R), y1 = this.fCell(w.y + R);
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        for (const f of this.fgrid[cy * FGN + cx]) {
+          const dx = f.x - w.x, dy = f.y - w.y, d = Math.hypot(dx, dy); if (d > R) continue;
+          const sc = f.v / (d + 30) * (1.25 - Math.abs(angDiff(Math.atan2(dy, dx), w.angle)) / Math.PI);
+          if (sc > bs) { bs = sc; best = f; }
+        }
+      }
+      if (best) desired = Math.atan2(best.y - w.y, best.x - w.x);
+      else desired = w.wander + (Math.random() - .5) * .8;
+    }
+    // desvia de corpos, bolas de fogo e da borda
+    const look = 70 + r * 4.5;
+    let pick = desired, low = Infinity;
+    for (const off of BOT_OFFS) {
+      const a = desired + off, dg = this.botDanger(w, a, look, r, list);
+      if (dg === 0) { pick = a; low = 0; break; }
+      if (dg < low) { low = dg; pick = a; }
+    }
+    w.wander = desired; w.target = angDiff(pick, 0);
+    w.wantBoost = false;
+  }
+  botDanger(w, a, look, r, list) {
+    const c = Math.cos(a), s = Math.sin(a), lim = (WORLD_R - r * 2.2) ** 2, rad = r * 1.15 + 6;
+    let dg = 0;
+    for (let k = 1; k <= 4; k++) {
+      const t = look * k / 4, px = w.x + c * t, py = w.y + s * t, wt = 5 - k;
+      if (px * px + py * py > lim) { dg += wt * 1.5; continue; }
+      let hit = false;
+      for (const f of this.fires.values()) if (f.owner !== w.id && (f.x - px) ** 2 + (f.y - py) ** 2 < (FB_R + rad) ** 2) { hit = true; break; }
+      if (!hit) {
+        const RR = rad + this.maxR, gx0 = this.gCell(px - RR), gx1 = this.gCell(px + RR), gy0 = this.gCell(py - RR), gy1 = this.gCell(py + RR);
+        out: for (let cy = gy0; cy <= gy1; cy++) for (let cx = gx0; cx <= gx1; cx++) {
+          for (const code of this.grid[cy * GN + cx]) {
+            const o = list[Math.floor(code / 1024)]; if (!o || o === w || !o.alive) continue;
+            const i = code % 1024, p = i === 0 ? o : o.pts[i - 1]; if (!p) continue;
+            const rr = rad + radiusOf(o.mass);
+            if ((p.x - px) ** 2 + (p.y - py) ** 2 < rr * rr) { hit = true; break out; }
+          }
+        }
+      }
+      if (hit) dg += wt;
+    }
+    return dg;
   }
   move(w, dt) {
     const P = w.powers;
@@ -549,6 +626,13 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); res.end(indexHtml); return;
   }
   if (url === '/favicon.ico') { res.writeHead(204); res.end(); return; }
+  if (url === '/restricao.png') {
+    fs.readFile(path.join(PUBLIC, 'restricao.png'), (err, buf) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' }); res.end(buf);
+    });
+    return;
+  }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('não encontrado');
 });
 server.on('upgrade', (req, sock, head) => {
@@ -573,7 +657,7 @@ function simLoop() {
   if (now - nextTick > 250) nextTick = now - TICK_MS;   // se o servidor travar, não tenta recuperar tudo de uma vez
   while (now >= nextTick) {
     nextTick += TICK_MS;
-    for (const r of rooms.values()) if (r.clients.size || r.worms.size || r.fires.size) r.step(TICK_MS / 1000);
+    for (const r of rooms.values()) if (r.clients.size || r.fires.size) r.step(TICK_MS / 1000);   // sem ninguém conectado, a toca (e o bot) param
   }
   setTimeout(simLoop, Math.max(1, nextTick - performance.now()));
 }
