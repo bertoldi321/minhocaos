@@ -546,7 +546,7 @@ const server = http.createServer((req, res) => {
   if (url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok'); return; }
   if (url === '/stats') {
     const r = []; for (const x of rooms.values()) r.push({ sala: x.name, conectados: x.clients.size, minhocas: x.worms.size, bolinhasSoltas: x.drops.size });
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ salas: r }, null, 1)); return;
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ regiao: process.env.FLY_REGION || 'local', maquina: process.env.FLY_MACHINE_ID || '-', salas: r }, null, 1)); return;
   }
   if (url === '/' || url === '/index.html') {
     if (DEV) loadIndex();
