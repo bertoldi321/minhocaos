@@ -1,6 +1,6 @@
 # Troque "minhocaos" por um nome livre se o Fly disser que já existe.
 # Use UMA máquina só (fly launch --ha=false / fly scale count 1): com duas, os amigos caem em partidas diferentes.
-app = "minhocaos"
+app = "minhocaos-br"
 primary_region = "gru"
 
 [build]

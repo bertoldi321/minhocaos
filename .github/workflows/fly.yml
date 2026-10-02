@@ -1,0 +1,20 @@
+# Publica o jogo no Fly.io (servidor em São Paulo) a cada mudança no GitHub.
+# Precisa do segredo FLY_API_TOKEN no repositório (Settings > Secrets and variables > Actions).
+name: Publicar no Fly (São Paulo)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: fly-deploy
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Criar o app (só na primeira vez)
+        run: flyctl status --app minhocaos-br >/dev/null 2>&1 || flyctl apps create minhocaos-br --org personal
+      - name: Publicar com uma máquina só
+        run: flyctl deploy --remote-only --ha=false --region gru --app minhocaos-br
