@@ -253,7 +253,8 @@ const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480;
 const FOOD_N = 1680, ORB_N = 28, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
 /* tudo é desenhado 90 ms no passado, no mesmo instante para todas as minhocas:
    o que você vê encostar é o que o servidor considerou */
-const INTERP = 90, OWN_DELAY = 90, EXTRAP = 200;
+const INTERP = 80, OWN_DELAY = 80, EXTRAP = 200;
+let predDt = 0;
 
 const POWERS = {
   ima:    { name: 'Ímã',      color: '#ff5c8a', dur: 10, tag: 'frequente', desc: 'Puxa as bolinhas de um raio grande direto para a sua boca.' },
@@ -680,6 +681,22 @@ function placeWorm(w, rt) {
     const spd = (e[5] & PBIT.turbo ? TURBO_SPEED : e[5] & F_BOOST ? BOOST_SPEED : BASE_SPEED) * (e[5] & (F_FROZEN | PBIT.lento) ? SLOW : 1);
     x = e[1] + Math.cos(ea) * spd * ex; y = e[2] + Math.sin(ea) * spd * ex; ang = ea; m = e[4]; f = e[5];
   } else { e = b.e; x = e[1]; y = e[2]; ang = e[3] / 100; m = e[4]; f = e[5]; }
+  if (w.isMe && state === 'play') {
+    // previsão: a sua minhoca responde na hora ao comando; o servidor continua decidindo as batidas
+    if (w.pa === undefined || Math.hypot(x - w.px, y - w.py) > 160) { w.px = x; w.py = y; w.pa = ang; }
+    else {
+      const r = radiusOf(m), slow = f & (F_FROZEN | PBIT.lento), turbo = f & PBIT.turbo;
+      const boost = turbo || (wantBoost && m > 20 && !slow);
+      const spd = (turbo ? TURBO_SPEED : boost ? BOOST_SPEED : BASE_SPEED) * (slow ? SLOW : 1);
+      let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (slow) tr *= .5;
+      const d = angDiff(wantAngle === null ? w.pa : wantAngle, w.pa), mm = tr * predDt;
+      w.pa = angDiff(w.pa + (Math.abs(d) < mm ? d : Math.sign(d) * mm), 0);
+      w.px += Math.cos(w.pa) * spd * predDt; w.py += Math.sin(w.pa) * spd * predDt;
+      const k = 1 - Math.pow(.3, predDt);           // puxa devagar para a posição do servidor
+      w.px += (x - w.px) * k; w.py += (y - w.py) * k;
+    }
+    x = w.px; y = w.py; ang = w.pa;
+  } else if (w.isMe) w.pa = undefined;
   w.x = x; w.y = y; w.angle = ang; w.mass = m; w.kills = e[6] | 0;
   if (!w.isMe) w.target = ang;
   if (m > w.maxMass) w.maxMass = m;
@@ -925,7 +942,8 @@ function step(dt, now) {
   } else prevFlags = 0;
   for (const k in myPowers) { myPowers[k] -= dt; if (myPowers[k] <= 0 || (me && me.flags >= 0 && !(me.flags & PBIT[k]) && POWERS[k].dur - myPowers[k] > .5)) delete myPowers[k]; }
   if (off !== undefined) {
-    const rtO = now - off - INTERP, rtM = now - off - OWN_DELAY;
+    const rtO = now - off - INTERP, rtM = now - off + Math.min(rtt || 120, 180);   // a sua: o servidor um ida-e-volta à frente
+    predDt = dt;
     while (evq.length && evq[0].t <= rtO) { const b = evq.shift(); for (const e of b.e) applyEvent(e); }
     const newest = snaps.length ? snaps[snaps.length - 1].t : 0;
     for (const w of [...worms.values()]) {
