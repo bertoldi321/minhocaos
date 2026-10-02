@@ -253,7 +253,8 @@ const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480;
 const FOOD_N = 1680, ORB_N = 28, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
 /* tudo é desenhado 90 ms no passado, no mesmo instante para todas as minhocas:
    o que você vê encostar é o que o servidor considerou */
-const INTERP = 80, OWN_DELAY = 80, EXTRAP = 200;
+const INTERP = 60, OWN_DELAY = 60, EXTRAP = 200;
+let rttAvg = 0;
 let predDt = 0;
 
 const POWERS = {
@@ -733,7 +734,7 @@ function onSnapshot(m) {
   const map = new Map();
   for (const e of m.w) { map.set(e[0], e); if (!worms.has(e[0])) makeWorm(e[0], '…', 'ff8a3d'); }
   const lastS = snaps[snaps.length - 1];
-  if (!lastS || t > lastS.t) { snaps.push({ t, w: map }); if (snaps.length > 60) snaps.shift(); }
+  if (!lastS || t > lastS.t) { snaps.push({ t, w: map }); if (snaps.length > 120) snaps.shift(); }
   if (m.e && m.e.length) {
     for (const e of m.e) if (e[0] === 'n') wormInfo(e[1], e[2], e[3]);
     evq.push({ t, e: m.e });
@@ -812,7 +813,7 @@ function onMessage(m) {
     case 'you': myWormId = m.w; { const w = worms.get(m.w); if (w) { w.isMe = true; me = w; } } startPlaying(); break;
     case 'r': roster = Array.isArray(m.p) ? m.p : []; renderLobby(); break;
     case 'b': for (const q of m.w || []) { const w = worms.get(q[0]); if (w) w.pendingPoly = q[1]; } break;
-    case 'p': rtt = Math.round(performance.now() - m.c); break;
+    case 'p': { const r = performance.now() - m.c; rttAvg = rttAvg ? rttAvg * .6 + r * .4 : r; rtt = Math.round(rttAvg); break; }
     case 'old': conn = 'old'; renderLobby(true); break;
     case 'full': conn = 'full'; renderLobby(true); break;
   }

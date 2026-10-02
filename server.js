@@ -27,7 +27,7 @@ const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480;
 const FOOD_N = 1680, ORB_N = 28;
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
-const TICK_MS = 25, SEND_EVERY = 2;               // simulação a 40 Hz, envio a 20 Hz
+const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
 const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6 };
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128;
@@ -105,7 +105,8 @@ class Room {
     this.fires = new Map(); this.nextFire = 1;
     this.events = [];
     this.grid = Array.from({ length: GN * GN }, () => []); this.gused = [];
-    this.fgrid = Array.from({ length: FGN * FGN }, () => []); this.fused = [];
+    this.fgrid = Array.from({ length: FGN * FGN }, () => []);          // grade fixa das bolinhas: só muda quando alguém come
+    for (let i = 0; i < FOOD_N; i++) this.fAdd(this.slots[i]);
     this.emptySince = Date.now(); this.rosterT = 0;
   }
   gCell(v) { const c = Math.floor((v + WORLD_R) / CELL) + 2; return c >= 0 ? (c < GN ? c : GN - 1) : 0; }
@@ -175,7 +176,7 @@ class Room {
     const r2 = x * x + y * y, lim = (WORLD_R - 20) ** 2;
     if (r2 > lim) { const k = Math.sqrt(lim / r2); x *= k; y *= k; }
     const d = { id: this.nextDrop++, x, y, v: Math.round(v * 100) / 100, r: foodRadius(v), col, age: 0, slot: -1, eaten: false };
-    this.drops.set(d.id, d);
+    this.drops.set(d.id, d); this.fAdd(d);
     this.events.push(['d', d.id, Math.round(x), Math.round(y), d.v, col]);
   }
   bodyDrops(w, pts, n, val) {
@@ -220,11 +221,11 @@ class Room {
     }
     for (const w of list) this.move(w, dt);
     for (const [id, f] of this.fires) { f.age += dt; if (f.age > FB_TTL) this.fires.delete(id); else fbPos(f, f.age); }
-    this.buildGrid(list); this.buildFoodGrid();
+    this.buildGrid(list);
     for (const w of list) this.eat(w);
     this.pickOrbs(list);
     this.collide(list);
-    for (const [id, d] of this.drops) { d.age += dt; if (d.age > DROP_TTL) { this.drops.delete(id); this.events.push(['X', id]); } }
+    for (const [id, d] of this.drops) { d.age += dt; if (d.age > DROP_TTL) { this.drops.delete(id); this.fDel(d); this.events.push(['X', id]); } }
     let changed = false;
     for (const w of list) if (!w.alive) {
       this.worms.delete(w.id);
@@ -280,13 +281,8 @@ class Room {
     }
   }
   gAdd(x, y, code) { const k = this.gCell(y) * GN + this.gCell(x), c = this.grid[k]; if (!c.length) this.gused.push(k); c.push(code); }
-  buildFoodGrid() {
-    const g = this.fgrid;
-    for (const i of this.fused) g[i].length = 0; this.fused.length = 0;
-    const add = f => { const k = this.fCell(f.y) * FGN + this.fCell(f.x), c = g[k]; if (!c.length) this.fused.push(k); c.push(f); };
-    for (let i = 0; i < FOOD_N; i++) add(this.slots[i]);
-    for (const d of this.drops.values()) add(d);
-  }
+  fAdd(f) { f.cell = this.fCell(f.y) * FGN + this.fCell(f.x); this.fgrid[f.cell].push(f); }
+  fDel(f) { const c = this.fgrid[f.cell], i = c.indexOf(f); if (i >= 0) { c[i] = c[c.length - 1]; c.pop(); } }
   eat(w) {
     if (!w.alive) return;
     const r = radiusOf(w.mass), reach = r + 10, mag = w.powers.ima ? IMA_R : 0, dbl = w.powers.dobro ? 2 : 1;
@@ -294,14 +290,14 @@ class Room {
     const x0 = this.fCell(w.x - R), x1 = this.fCell(w.x + R), y0 = this.fCell(w.y - R), y1 = this.fCell(w.y + R);
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
       const c = this.fgrid[cy * FGN + cx];
-      for (let j = 0; j < c.length; j++) {
-        const f = c[j]; if (f.eaten) continue;
+      for (let j = c.length - 1; j >= 0; j--) {
+        const f = c[j]; if (!f || f.eaten) continue;
         const dx = f.x - w.x, dy = f.y - w.y, er = Math.max(reach + f.r, mag);
         if (dx * dx + dy * dy >= er * er) continue;
-        f.eaten = true; w.mass += f.v * dbl;
+        f.eaten = true; w.mass += f.v * dbl; this.fDel(f);
         if (f.slot >= 0) {
           const i = f.slot, g = this.gens[i] >= 4095 ? 1 : this.gens[i] + 1;
-          this.gens[i] = g; this.slots[i] = slotFood(this.seed, i, g);
+          this.gens[i] = g; this.slots[i] = slotFood(this.seed, i, g); this.fAdd(this.slots[i]);
           this.events.push(['f', i, g, w.id]);
         } else {
           this.drops.delete(f.id);
@@ -569,16 +565,19 @@ server.on('upgrade', (req, sock, head) => {
 });
 
 /* ================= laço da simulação ================= */
-let last = performance.now(), acc = 0;
-setInterval(() => {
+/* acorda só quando chega a hora do próximo passo (40 vezes por segundo): gasta pouca CPU,
+   o que importa em máquinas compartilhadas, que travam quando passam da cota */
+let nextTick = performance.now();
+function simLoop() {
   const now = performance.now();
-  acc += now - last; last = now;
-  if (acc > 250) acc = 250;                       // se o servidor travar, não tenta recuperar tudo de uma vez
-  while (acc >= TICK_MS) {
-    acc -= TICK_MS;
+  if (now - nextTick > 250) nextTick = now - TICK_MS;   // se o servidor travar, não tenta recuperar tudo de uma vez
+  while (now >= nextTick) {
+    nextTick += TICK_MS;
     for (const r of rooms.values()) if (r.clients.size || r.worms.size || r.fires.size) r.step(TICK_MS / 1000);
   }
-}, 5);
+  setTimeout(simLoop, Math.max(1, nextTick - performance.now()));
+}
+simLoop();
 setInterval(() => {
   const now = Date.now();
   for (const c of clients) {
