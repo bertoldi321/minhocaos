@@ -64,6 +64,9 @@ const enc2 = n => B64[(n >> 6) & 63] + B64[n & 63];
 const NAME_JUNK = new RegExp('[' + [[0, 31], [127, 159], [173, 173], [8203, 8207], [8232, 8238], [8288, 8303], [65279, 65279]].map(r => String.fromCharCode(r[0]) + '-' + String.fromCharCode(r[1])).join('') + ']', 'g');
 function cleanName(s) { return typeof s === 'string' ? (s.replace(NAME_JUNK, '').trim().slice(0, 14) || 'Visitante') : 'Visitante'; }
 function cleanSkin(s) { return typeof s === 'string' && /^([0-9a-f]{6}){1,3}$/i.test(s) ? s.toLowerCase() : 'ff7a2fffb347'; }
+// pele Demônio: só para quem mandou a senha certa (guardamos apenas o hash)
+const DEMON_SK = 'a8100c1a0507', DEMON_HASH = 'e8e1d4fdc13d856b51630e48c4440720b7709683768ba3eab8bf7f75cd6eb2ce', PW_TRIES = 8;
+const isDemonPw = s => typeof s === 'string' && s.length <= 40 && crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex') === DEMON_HASH;
 function cleanRoom() { return 'geral'; }   // uma toca só para todo mundo
 const num = v => typeof v === 'number' && isFinite(v);
 
@@ -504,7 +507,7 @@ class Client {
   constructor(sock) {
     this.id = nextClient++; this.sock = sock; this.buf = Buffer.alloc(0); this.frag = null; this.fragOp = 0; this.fragLen = 0;
     this.open = true; this.lastSeen = Date.now(); this.room = null; this.worm = null;
-    this.name = 'Visitante'; this.skin = 'ff7a2fffb347';
+    this.name = 'Visitante'; this.skin = 'ff7a2fffb347'; this.demon = false; this.pwTries = 0;
     this.rateT = Date.now(); this.rateN = 0;
     clients.add(this);
   }
@@ -567,6 +570,18 @@ class Client {
     if (SIM_LAG) { const s = data.toString(); setTimeout(() => this.handle(s), SIM_LAG / 2); }
     else this.handle(data.toString());
   }
+  tryPw(s) {
+    if (this.demon) return true;
+    if (typeof s !== 'string' || !s || this.pwTries >= PW_TRIES) return false;
+    if (isDemonPw(s)) return (this.demon = true);
+    this.pwTries++; return false;
+  }
+  look(m) {
+    this.name = cleanName(m.n);
+    if (m.s !== undefined) this.tryPw(m.s);
+    const k = cleanSkin(m.k);
+    this.skin = k === DEMON_SK && !this.demon ? 'ff7a2fffb347' : k;
+  }
   handle(text) {
     if (!this.open) return;
     let m; try { m = JSON.parse(text); } catch (e) { return; }
@@ -575,7 +590,7 @@ class Client {
       case 'hi': {
         if (this.room) return;
         if (m.v !== PROTO) { this.send({ t: 'old' }); return; }
-        this.name = cleanName(m.n); this.skin = cleanSkin(m.k);
+        this.look(m);
         const r = getRoom(cleanRoom(m.r));
         if (!r) { this.send({ t: 'full' }); return; }
         if (r.clients.size >= MAX_PLAYERS) { this.send({ t: 'full' }); return; }
@@ -583,12 +598,15 @@ class Client {
         break;
       }
       case 'name':
-        this.name = cleanName(m.n); this.skin = cleanSkin(m.k);
+        this.look(m);
         if (this.room) this.room.sendRoster();
+        break;
+      case 'senha':
+        this.send({ t: 'senha', ok: this.tryPw(m.s) });
         break;
       case 'play':
         if (!this.room || (this.worm && this.worm.alive)) return;
-        this.name = cleanName(m.n); this.skin = cleanSkin(m.k);
+        this.look(m);
         this.room.spawn(this);
         break;
       case 'in':
