@@ -25,7 +25,7 @@ const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida 
 const PROTO = 5;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
-const STACK_GAIN = .25, MAX_MULT = 15;      // modo Turbo: cada Turbo pego soma 25% de velocidade até a minhoca morrer
+const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
 const FOOD_N = 1680, ORB_N = 28;
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
 const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
@@ -225,7 +225,7 @@ class Room {
   /* ---------- poderes ---------- */
   applyPower(w, type) {
     if (type === 'cresce') { w.mass *= GROW; return; }
-    if (type === 'turbo' && this.mode === 'turbo') w.stack = (w.stack || 0) + 1;
+    if (type === 'turbo' && this.mode === 'turbo') { w.stack = (w.stack || 0) + 1; w.powers.turbo = Infinity; return; }
     if (type === 'fogo') this.spawnFire(w);
     if (type === 'veneno') w.poison = w.mass * POISON_LOSS / POWER_DUR.veneno;   // perde 20% aos poucos
     if (POWER_DUR[type]) w.powers[type] = POWER_DUR[type];
@@ -256,7 +256,7 @@ class Room {
       }
     }
     let top = 0; for (const w of list) if ((w.lastSpd || 0) > top) top = w.lastSpd;
-    const sub = clamp(Math.ceil(top * dt / 16), 1, 10), sdt = dt / sub;
+    const sub = clamp(Math.ceil(top * dt / 16), 1, 24), sdt = dt / sub;
     for (const [id, f] of this.fires) { f.age += dt; if (f.age > FB_TTL) this.fires.delete(id); else fbPos(f, f.age); }
     for (let k = 0; k < sub; k++) {
       for (const w of list) if (w.alive) this.move(w, sdt);
@@ -358,7 +358,7 @@ class Room {
     w.superOn = demon && !!w.wantSuper && w.mass > MIN_BOOST && !fz && !turbo;
     w.boosting = turbo || w.superOn || (w.wantBoost && w.mass > MIN_BOOST && !fz);
     let spd = turbo ? TURBO_SPEED : w.superOn ? DEMON_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
-    w.mult = w.stack ? Math.min(MAX_MULT, 1 + w.stack * STACK_GAIN) : 1;
+    w.mult = w.stack ? Math.min(MAX_STACK, w.stack) : 1;
     spd *= w.mult;
     if (fz) spd *= SLOW;
     w.lastSpd = spd;

@@ -278,7 +278,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
         <span class="lbl" id="modeLbl">Modo</span>
         <div class="modes" role="radiogroup" aria-labelledby="modeLbl">
           <button type="button" class="mode" id="mode-normal" role="radio" aria-checked="true"><b>Normal</b><small>Poderes duram alguns segundos.</small><span class="mcount"></span></button>
-          <button type="button" class="mode turbo" id="mode-turbo" role="radio" aria-checked="false"><b>Turbo</b><small>Cada Turbo soma velocidade até você morrer.</small><span class="mcount"></span></button>
+          <button type="button" class="mode turbo" id="mode-turbo" role="radio" aria-checked="false"><b>Turbo</b><small>O Turbo não acaba e se soma: 1×, 2×, 3×…</small><span class="mcount"></span></button>
         </div>
         <span class="lbl" id="skinLbl">Pele</span>
         <div class="skins" id="skins" role="radiogroup" aria-labelledby="skinLbl"></div>
@@ -881,6 +881,7 @@ function applyEvent(e) {
       if (w && w.isMe && type) {
         const P = POWERS[type];
         if (type === 'cresce') toast(`<b>Crescer</b> deixou sua minhoca 20% maior`, P.color);
+        else if (type === 'turbo' && mode === 'turbo') { myStack++; toast(`<b>Turbo ×${myStack}</b>: não acaba mais`, P.color); }
         else {
           myPowers[type] = P.dur;
           toast(type === 'lento' ? `<b>Lerdeza</b> deixou você lento por ${P.dur} segundos`
@@ -1597,15 +1598,15 @@ function setChip(key, rem, dur, col, label, iconKey) {
       el.chips.appendChild(c); chipEls[key] = c; c._sec = c.querySelector('.sec');
     }
     c.style.setProperty('--p', clamp(rem / dur, 0, 1).toFixed(3));
-    const s = key === 'frio' ? 'lento' : key === 'vel' ? '×' + (me ? me.mult : 1).toFixed(2).replace('.', ',').replace(/,?0+$/, '') : Math.ceil(rem) + 's';
+    const s = key === 'frio' ? 'lento' : key === 'vel' ? '×' + Math.round(me ? me.mult : 1) : Math.ceil(rem) + 's';
     if (c._sec.textContent !== s) c._sec.textContent = s;
   } else if (c) { c.remove(); delete chipEls[key]; }
 }
 function updateChips() {
   const alive = me && me.alive;
-  for (const k of PKEYS) if (POWERS[k].dur) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
+  for (const k of PKEYS) if (POWERS[k].dur && !(k === 'turbo' && mode === 'turbo')) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
   setChip('frio', alive && me.frozen > 0 && !myPowers.gelo ? 1 : 0, 1, '#7fe7ff', 'Congelado por outra minhoca', 'gelo');
-  setChip('vel', alive && me.mult > 1 ? 1 : 0, 1, '#ffd23f', 'Velocidade acumulada no modo Turbo', 'turbo');
+  setChip('vel', alive && mode === 'turbo' && (me.flags & PBIT.turbo) ? 1 : 0, 1, '#ffd23f', 'Turbos acumulados', 'turbo');
   sb.hidden = !(alive && me.demon && state === 'play');
 }
 function othersOnline() { return roster.filter(p => p[0] !== meId); }
@@ -1682,19 +1683,19 @@ function requestPlay() {
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send(Object.assign({ t: 'play' }, look()));
 }
-let lastRank = 99, kingT = -99, milestone = 0, turboTold = false;
+let lastRank = 99, kingT = -99, milestone = 0, turboTold = false, myStack = 0;
 function flash(text, col) {
   el.flashText.textContent = text; el.flash.style.setProperty('--fc', col);
   el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
   sfx('power');
 }
 function startPlaying() {
-  lastRank = 99; milestone = 0;
+  lastRank = 99; milestone = 0; myStack = 0;
   stats = { start: time, end: 0, bestRank: 99, maxMass: 30, kills: 0 }; death = null; myPowers = {}; lastPrize = null;
   state = 'play'; input.aim = false; wantAngle = null; lastSent = { a: null, b: null, t: 0 };
   el.menu.hidden = true; el.over.hidden = true; el.hud.hidden = false;
   el.toasts.innerHTML = ''; hudT = 0; mmT = 0;
-  if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: cada Turbo soma velocidade até você morrer', '#ffd23f'); }
+  if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: o Turbo não acaba e se soma (1×, 2×, 3×…)', '#ffd23f'); }
   if (SKINS[skinIdx].lock && demonPw) toast(coarse ? 'Demônio: botão vermelho liga a serra · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> liga a serra · <b>Shift</b> turbo do demônio', '#ff3b1a');
   updateBoard();
 }
