@@ -24,14 +24,16 @@ const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida 
 /* ================= regras (iguais às do cliente) ================= */
 const PROTO = 5;
 const TAU = Math.PI * 2, WORLD_R = 3200;
-const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480;
+const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
+const STACK_GAIN = .25, MAX_MULT = 15;      // modo Turbo: cada Turbo pego soma 25% de velocidade até a minhoca morrer
 const FOOD_N = 1680, ORB_N = 28;
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
 const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
 const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6 };
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096;
 const ORB_WEIGHTS = [['ima', 30], ['turbo', 30], ['dobro', 7], ['cresce', 7], ['lento', 6], ['gelo', 6], ['fogo', 6], ['cego', 4], ['veneno', 3], ['serra', 1]];
+const TURBO_ORB_WEIGHTS = [['turbo', 50], ['ima', 20], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
 /* bolas de fogo: saem da cabeça de quem pegou o poder, se espalham e ficam paradas queimando */
@@ -54,7 +56,7 @@ function h32() {
   return h >>> 0;
 }
 const rng = (...a) => mulberry32(h32(...a));
-function orbType(r) { let x = r * 100; for (const [k, w] of ORB_WEIGHTS) { x -= w; if (x < 0) return k; } return 'ima'; }
+function orbType(r, wts) { let x = r * 100; for (const [k, w] of wts || ORB_WEIGHTS) { x -= w; if (x < 0) return k; } return 'ima'; }
 const segCount = mass => Math.min(MAX_SEG, Math.round(10 + Math.pow(Math.max(1, mass), .82) / 2));
 const massForSeg = n => n <= 10 ? 14 : Math.pow((n - 10) * 2, 1 / .82);
 const radiusOf = m => 9 + Math.sqrt(Math.max(0, m)) * .42;
@@ -91,7 +93,7 @@ function readWallet(s) {
   if (!crypto.timingSafeEqual(Buffer.from(walletSig(g, o)), Buffer.from(m[3]))) return null;
   return { gold: g, owned: new Set(o ? o.split(',').filter(k => GOLD_SKINS[k]) : []) };
 }
-function cleanRoom() { return 'geral'; }   // uma toca só para todo mundo
+function cleanRoom(r) { return r === 'turbo' ? 'turbo' : 'geral'; }   // duas tocas: normal e modo Turbo   // uma toca só para todo mundo
 const num = v => typeof v === 'number' && isFinite(v);
 
 /* mesmas fórmulas do cliente: posição e valor de cada bolinha e de cada esfera saem da semente da sala */
@@ -99,9 +101,9 @@ function slotFood(seed, i, g) {
   const R = rng(seed, i, g), a = R() * TAU, rr = Math.sqrt(R()) * WORLD_R * .97, v = 1 + R() * 1.6;
   return { x: Math.cos(a) * rr, y: Math.sin(a) * rr, v, r: foodRadius(v), slot: i, id: 0, eaten: false };
 }
-function orbFor(seed, i, g, time) {
+function orbFor(seed, i, g, time, wts) {
   const R = rng(seed ^ 0x0b5, i, g), a = R() * TAU, rr = Math.sqrt(R()) * WORLD_R * .9;
-  return { x: Math.cos(a) * rr, y: Math.sin(a) * rr, type: orbType(R()), born: time + (g ? ORB_DELAY : 0) };
+  return { x: Math.cos(a) * rr, y: Math.sin(a) * rr, type: orbType(R(), wts), born: time + (g ? ORB_DELAY : 0) };
 }
 function fbPos(f, age) { const k = age >= FB_FLY ? 1 : 1 - Math.pow(1 - age / FB_FLY, 3); f.x = f.x0 + (f.x1 - f.x0) * k; f.y = f.y0 + (f.y1 - f.y0) * k; }
 function encodePoly(w) {
@@ -117,13 +119,14 @@ function encodePoly(w) {
 }
 function flagsOf(w) {
   let f = 0; for (const k in w.powers) if (PBIT[k]) f |= PBIT[k];
-  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; return f;
+  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; return f;
 }
 
 /* ================= sala ================= */
 class Room {
   constructor(name) {
     this.name = name;
+    this.mode = name === 'turbo' ? 'turbo' : 'normal'; this.weights = this.mode === 'turbo' ? TURBO_ORB_WEIGHTS : ORB_WEIGHTS;
     this.seed = crypto.randomInt(1, 2 ** 31 - 1);
     this.time = 0; this.tick = 0;
     this.clients = new Set();
@@ -131,7 +134,7 @@ class Room {
     this.gens = new Uint16Array(FOOD_N); this.slots = new Array(FOOD_N);
     for (let i = 0; i < FOOD_N; i++) this.slots[i] = slotFood(this.seed, i, 0);
     this.orbGens = new Uint16Array(ORB_N); this.orbs = new Array(ORB_N);
-    for (let i = 0; i < ORB_N; i++) this.orbs[i] = orbFor(this.seed, i, 0, 0);
+    for (let i = 0; i < ORB_N; i++) this.orbs[i] = orbFor(this.seed, i, 0, 0, this.weights);
     this.drops = new Map(); this.nextDrop = 1;
     this.fires = new Map(); this.nextFire = 1;
     this.events = [];
@@ -148,14 +151,14 @@ class Room {
   join(c) {
     this.clients.add(c); c.room = this; this.emptySince = 0;
     this.sendWelcome(c);
-    this.sendRoster();
+    rosterAll();
   }
   leave(c) {
     if (c.worm && c.worm.alive) this.kill(c.worm, null, 'left');
     c.worm = null;
     this.clients.delete(c); c.room = null;
     if (!this.clients.size) this.emptySince = Date.now();
-    this.sendRoster();
+    rosterAll();
   }
   sendWelcome(c) {
     let gs = ''; for (let i = 0; i < FOOD_N; i++) gs += enc2(this.gens[i]);
@@ -164,7 +167,7 @@ class Room {
     const worms = []; for (const w of this.worms.values()) worms.push([w.id, w.name, w.skin, encodePoly(w)]);
     const drops = []; for (const d of this.drops.values()) drops.push([d.id, Math.round(d.x), Math.round(d.y), d.v, d.col]);
     const fires = []; for (const f of this.fires.values()) fires.push([f.id, Math.round(f.x0), Math.round(f.y0), Math.round(f.x1), Math.round(f.y1), f.owner, +f.age.toFixed(2)]);
-    c.send({ t: 'w', v: PROTO, room: this.name, seed: this.seed, me: c.id, k: this.tick, tickMs: TICK_MS, gens: gs, og, ob, worms, drops, fires });
+    c.send({ t: 'w', v: PROTO, room: this.name, mode: this.mode, seed: this.seed, me: c.id, k: this.tick, tickMs: TICK_MS, gens: gs, og, ob, worms, drops, fires });
   }
   sendBodies(c) {
     const b = []; for (const w of this.worms.values()) b.push([w.id, encodePoly(w)]);
@@ -172,7 +175,7 @@ class Room {
   }
   sendRoster() {
     const p = []; for (const c of this.clients) p.push([c.id, c.name, c.skin.slice(0, 6), c.worm && c.worm.alive ? 1 : 0]);
-    const msg = JSON.stringify({ t: 'r', p });
+    const msg = JSON.stringify({ t: 'r', p, n: roomCounts() });
     for (const c of this.clients) c.sendText(msg);
   }
   safeSpot() {
@@ -222,6 +225,7 @@ class Room {
   /* ---------- poderes ---------- */
   applyPower(w, type) {
     if (type === 'cresce') { w.mass *= GROW; return; }
+    if (type === 'turbo' && this.mode === 'turbo') w.stack = (w.stack || 0) + 1;
     if (type === 'fogo') this.spawnFire(w);
     if (type === 'veneno') w.poison = w.mass * POISON_LOSS / POWER_DUR.veneno;   // perde 20% aos poucos
     if (POWER_DUR[type]) w.powers[type] = POWER_DUR[type];
@@ -251,12 +255,16 @@ class Room {
         if (dx * dx + dy * dy < GELO_R * GELO_R) o.frozen = Math.max(o.frozen, .35);
       }
     }
-    for (const w of list) this.move(w, dt);
+    let top = 0; for (const w of list) if ((w.lastSpd || 0) > top) top = w.lastSpd;
+    const sub = clamp(Math.ceil(top * dt / 16), 1, 10), sdt = dt / sub;
     for (const [id, f] of this.fires) { f.age += dt; if (f.age > FB_TTL) this.fires.delete(id); else fbPos(f, f.age); }
-    this.buildGrid(list);
-    for (const w of list) this.eat(w);
-    this.pickOrbs(list);
-    this.collide(list);
+    for (let k = 0; k < sub; k++) {
+      for (const w of list) if (w.alive) this.move(w, sdt);
+      this.buildGrid(list);
+      for (const w of list) this.eat(w);
+      this.pickOrbs(list);
+      this.collide(list);
+    }
     for (const [id, d] of this.drops) { d.age += dt; if (d.age > DROP_TTL) { this.drops.delete(id); this.fDel(d); this.events.push(['X', id]); } }
     let changed = false;
     for (const w of list) if (!w.alive) {
@@ -344,9 +352,16 @@ class Room {
     if (w.frozen > 0) w.frozen -= dt;
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
-    w.boosting = turbo || (w.wantBoost && w.mass > MIN_BOOST && !fz);
-    let spd = turbo ? TURBO_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
+    // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
+    const demon = w.skin === DEMON_SK;
+    w.sawOn = demon && !!w.wantSaw && w.mass > MIN_BOOST;
+    w.superOn = demon && !!w.wantSuper && w.mass > MIN_BOOST && !fz && !turbo;
+    w.boosting = turbo || w.superOn || (w.wantBoost && w.mass > MIN_BOOST && !fz);
+    let spd = turbo ? TURBO_SPEED : w.superOn ? DEMON_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
+    w.mult = w.stack ? Math.min(MAX_MULT, 1 + w.stack * STACK_GAIN) : 1;
+    spd *= w.mult;
     if (fz) spd *= SLOW;
+    w.lastSpd = spd;
     let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (fz) tr *= .5;
     const d = angDiff(w.target, w.angle), m = tr * dt;
     w.angle = angDiff(w.angle + (Math.abs(d) < m ? d : Math.sign(d) * m), 0);
@@ -363,8 +378,8 @@ class Room {
     }
     const n = segCount(w.mass);
     if (w.pts.length > n) w.pts.length = n;
-    if (w.boosting && !turbo) {
-      const loss = (4 + w.mass * .012) * dt;
+    if ((w.boosting && !turbo) || w.sawOn) {
+      const loss = (4 + w.mass * .012) * dt * ((w.boosting && !turbo ? 1 : 0) + (w.sawOn ? .8 : 0));
       w.mass -= loss; w.drop += loss;
       if (w.drop >= 3) {
         const t = w.pts[w.pts.length - 1] || w;
@@ -419,7 +434,7 @@ class Room {
         if (dx * dx + dy * dy < rr * rr) {
           this.applyPower(w, o.type);
           const g = this.orbGens[i] >= 4095 ? 1 : this.orbGens[i] + 1;
-          this.orbGens[i] = g; this.orbs[i] = orbFor(this.seed, i, g, this.time);
+          this.orbGens[i] = g; this.orbs[i] = orbFor(this.seed, i, g, this.time, this.weights);
           this.events.push(['o', i, g, w.id, o.type]);
           break;
         }
@@ -432,7 +447,7 @@ class Room {
       const w = list[wi]; if (!w.alive) continue;
       const r = radiusOf(w.mass), lim = WORLD_R - r * .4;
       if (w.x * w.x + w.y * w.y > lim * lim) { ev.push({ k: 'die', v: w, by: null, c: 'wall' }); continue; }
-      const saw = !!w.powers.serra, hr = r * .82, R = hr + this.maxR;
+      const saw = !!w.powers.serra || !!w.sawOn, hr = r * .82, R = hr + this.maxR;
       let burnt = null;
       for (const f of this.fires.values()) {
         if (f.owner === w.id) continue;                          // quem soltou o fogo não se queima
@@ -465,7 +480,7 @@ class Room {
         const front = h.min === 0 || (h.min <= 2 && Math.cos(w.angle - o.angle) < 0);
         if (front) {
           // cabeça com cabeça: perde a menor (a Serra sempre vence; empate derruba as duas)
-          if (o.powers.serra) { ev.push({ k: 'die', v: w, by: o, c: 'saw' }); break; }
+          if (o.powers.serra || o.sawOn) { ev.push({ k: 'die', v: w, by: o, c: 'saw' }); break; }
           if (w.mass <= o.mass) { ev.push({ k: 'die', v: w, by: o, c: 'head' }); break; }
           if (h.deep) { ev.push({ k: 'die', v: w, by: o, c: 'body' }); break; }
         } else { ev.push({ k: 'die', v: w, by: o, c: 'body' }); break; }
@@ -506,7 +521,11 @@ class Room {
   }
   broadcast() {
     const w = [];
-    for (const x of this.worms.values()) w.push([x.id, Math.round(x.x), Math.round(x.y), Math.round(x.angle * 100), Math.round(x.mass), flagsOf(x), x.kills]);
+    for (const x of this.worms.values()) {
+      const e = [x.id, Math.round(x.x), Math.round(x.y), Math.round(x.angle * 100), Math.round(x.mass), flagsOf(x), x.kills];
+      if (x.mult > 1) e.push(Math.round(x.mult * 100));
+      w.push(e);
+    }
     const msg = JSON.stringify({ t: 's', k: this.tick, w, e: this.events });
     this.events = [];
     for (const c of this.clients) c.sendText(msg);
@@ -515,6 +534,8 @@ class Room {
 
 /* ================= salas ================= */
 const rooms = new Map();
+function roomCounts() { const n = {}; for (const r of rooms.values()) n[r.name] = r.clients.size; return n; }
+function rosterAll() { for (const r of rooms.values()) if (r.clients.size) r.sendRoster(); }
 function getRoom(name) {
   let r = rooms.get(name);
   if (!r) {
@@ -661,7 +682,7 @@ class Client {
         this.room.spawn(this);
         break;
       case 'in':
-        if (this.worm && this.worm.alive && num(m.a) && Math.abs(m.a) < 2000) { this.worm.target = m.a / 100; this.worm.wantBoost = !!m.b; }
+        if (this.worm && this.worm.alive && num(m.a) && Math.abs(m.a) < 2000) { this.worm.target = m.a / 100; this.worm.wantBoost = !!m.b; this.worm.wantSuper = m.b === 2; this.worm.wantSaw = !!m.s; }
         break;
       case 'sync':
         if (this.room) this.room.sendBodies(this);

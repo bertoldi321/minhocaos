@@ -89,6 +89,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-o
 .play:hover{filter:brightness(1.08)}
 .play:active{transform:translateY(3px);box-shadow:0 2px 0 var(--clay-deep)}
 .keys{margin:4px 0 0;font-size:13px;color:var(--ink-dim);line-height:1.9}
+.dm-hint{color:#ff7a5c;font-weight:600}
 kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:rgba(255,255,255,.05);font:600 12px/1.6 var(--ui);color:var(--ink)}
 .best{margin:0;font-size:14px;color:var(--ink-dim)}
 .best b{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -177,6 +178,18 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 #boostBtn svg{width:34px;height:34px}
 #boostBtn.on{background:rgba(255,210,63,.42)}
 @media (pointer:coarse){#boostBtn{display:grid}}
+#sawBtn{position:fixed;left:30px;bottom:calc(env(safe-area-inset-bottom,0px) + 122px);width:62px;height:62px;border-radius:50%;display:none;place-items:center;background:rgba(255,59,26,.16);border:2px solid #ff3b1a;color:#ff3b1a;touch-action:none}
+#sawBtn svg{width:28px;height:28px}
+#sawBtn.on{background:rgba(255,59,26,.45)}
+@media (pointer:coarse){#sawBtn{display:grid}}
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.mode{display:grid;gap:3px;justify-items:start;text-align:left;padding:10px 12px;background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:12px;color:var(--ink-dim);min-width:0}
+.mode b{font:400 20px/1 var(--display);color:var(--ink)}
+.mode small{font-size:12.5px;line-height:1.35}
+.mcount{font-size:11.5px;font-weight:600;color:var(--ink-dim);opacity:.8}
+.mode[aria-checked="true"]{border-color:var(--clay);background:rgba(255,138,61,.13);color:var(--ink)}
+.mode.turbo b{color:#ffd23f}
+.mode.turbo[aria-checked="true"]{border-color:#ffd23f;background:rgba(255,210,63,.12)}
 #toasts{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 18px);transform:translateX(-50%);width:min(380px,calc(100% - 32px));display:grid;gap:6px;justify-items:center;z-index:6;pointer-events:none}
 .toast{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:14px;font-weight:500;animation:tin .25s ease-out,tout .45s ease-in 2.2s forwards;max-width:100%}
 .toast::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c)}
@@ -250,6 +263,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
   </div>
   <div class="mm"><canvas id="minimap" aria-label="Minimapa"></canvas></div>
   <button id="boostBtn" type="button" aria-label="Acelerar"></button>
+  <button id="sawBtn" type="button" aria-label="Ligar a serra" hidden></button>
   <div id="toasts" aria-live="polite"></div>
 </div>
 
@@ -261,6 +275,11 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
       <form id="startForm" class="form panel" autocomplete="off">
         <label class="lbl" for="name">Nome da minhoca</label>
         <input id="name" maxlength="14" placeholder="Seu nome" spellcheck="false">
+        <span class="lbl" id="modeLbl">Modo</span>
+        <div class="modes" role="radiogroup" aria-labelledby="modeLbl">
+          <button type="button" class="mode" id="mode-normal" role="radio" aria-checked="true"><b>Normal</b><small>Poderes duram alguns segundos.</small><span class="mcount"></span></button>
+          <button type="button" class="mode turbo" id="mode-turbo" role="radio" aria-checked="false"><b>Turbo</b><small>Cada Turbo soma velocidade até você morrer.</small><span class="mcount"></span></button>
+        </div>
         <span class="lbl" id="skinLbl">Pele</span>
         <div class="skins" id="skins" role="radiogroup" aria-labelledby="skinLbl"></div>
         <div class="gold-head"><span class="lbl" id="goldLbl">Peles de gold</span><span class="gold-bal" title="Gold: ganhe terminando a partida entre os 5 primeiros"><i class="coin" aria-hidden="true"></i><b id="goldVal">0</b> gold</span></div>
@@ -323,7 +342,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 /* ================= regras (iguais às do servidor) ================= */
 const PROTO = 5;
 const TAU = Math.PI * 2, WORLD_R = 3200;
-const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480;
+const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 1680, ORB_N = 28, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
 /* tudo é desenhado 90 ms no passado, no mesmo instante para todas as minhocas:
    o que você vê encostar é o que o servidor considerou */
@@ -344,10 +363,14 @@ const POWERS = {
   veneno: { name: 'Veneno',   color: '#a6e22e', dur: 6,  tag: 'armadilha', desc: 'Poder negativo: a minhoca fica verde e perde 20% do tamanho aos poucos.' },
 };
 const PKEYS = Object.keys(POWERS);
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096;
 const ORB_WEIGHTS = [['ima', 30], ['turbo', 30], ['dobro', 7], ['cresce', 7], ['lento', 6], ['gelo', 6], ['fogo', 6], ['cego', 4], ['veneno', 3], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
-function orbType(r) { let x = r * 100; for (const [k, w] of ORB_WEIGHTS) { x -= w; if (x < 0) return k; } return 'ima'; }
+const TURBO_ORB_WEIGHTS = [['turbo', 50], ['ima', 20], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
+let orbWts = ORB_WEIGHTS;   // no modo Turbo as esferas de Turbo aparecem mais
+function orbType(r) { let x = r * 100; for (const [k, w] of orbWts) { x -= w; if (x < 0) return k; } return 'ima'; }
+// velocidade de uma minhoca (igual à conta do servidor); sf = multiplicador acumulado do modo Turbo
+function spdOf(f, boost, sup, sf) { return (f & PBIT.turbo ? TURBO_SPEED : sup ? DEMON_SPEED : boost ? BOOST_SPEED : BASE_SPEED) * (sf || 1) * (f & (F_FROZEN | PBIT.lento) ? SLOW : 1); }
 
 const SKINS = [
   { name: 'Brasa',    c: ['#ff7a2f', '#ffb347'] },
@@ -736,6 +759,7 @@ function applyFlags(w, f) {
   if (w.flags === f) return; w.flags = f;
   const p = {}; for (const k of PKEYS) if (f & PBIT[k]) p[k] = 1;
   w.powers = p; w.boosting = !!(f & F_BOOST); w.frozen = f & F_FROZEN ? 1 : 0; w.slow = w.frozen || p.lento ? 1 : 0;
+  w.dsaw = !!(f & F_DSAW); w.superOn = !!(f & F_SUPER);
 }
 function applyPoly(w, q) {
   if (!Array.isArray(q) || typeof q[3] !== 'string') return;
@@ -780,7 +804,7 @@ function placeWorm(w, rt) {
     ang = a.e[3] / 100 + angDiff(b.e[3] / 100, a.e[3] / 100) * k; m = a.e[4] + (b.e[4] - a.e[4]) * k; f = k < .5 ? a.e[5] : b.e[5]; e = b.e;
   } else if (a) {
     e = a.e; const ex = Math.min(EXTRAP, rt - a.t) / 1000, ea = e[3] / 100;
-    const spd = (e[5] & PBIT.turbo ? TURBO_SPEED : e[5] & F_BOOST ? BOOST_SPEED : BASE_SPEED) * (e[5] & (F_FROZEN | PBIT.lento) ? SLOW : 1);
+    const spd = spdOf(e[5], e[5] & F_BOOST, e[5] & F_SUPER, (e[7] || 100) / 100);
     x = e[1] + Math.cos(ea) * spd * ex; y = e[2] + Math.sin(ea) * spd * ex; ang = ea; m = e[4]; f = e[5];
   } else { e = b.e; x = e[1]; y = e[2]; ang = e[3] / 100; m = e[4]; f = e[5]; }
   if (w.isMe && state === 'play') {
@@ -788,8 +812,8 @@ function placeWorm(w, rt) {
     if (w.pa === undefined || Math.hypot(x - w.px, y - w.py) > 160) { w.px = x; w.py = y; w.pa = ang; }
     else {
       const r = radiusOf(m), slow = f & (F_FROZEN | PBIT.lento), turbo = f & PBIT.turbo;
-      const boost = turbo || (wantBoost && m > 20 && !slow);
-      const spd = (turbo ? TURBO_SPEED : boost ? BOOST_SPEED : BASE_SPEED) * (slow ? SLOW : 1);
+      const sup = w.demon && wantSuper && m > 20 && !slow && !turbo, boost = turbo || sup || (wantBoost && m > 20 && !slow);
+      const spd = spdOf(f, boost, sup, (e[7] || 100) / 100);
       let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (slow) tr *= .5;
       const d = angDiff(wantAngle === null ? w.pa : wantAngle, w.pa), mm = tr * predDt;
       w.pa = angDiff(w.pa + (Math.abs(d) < mm ? d : Math.sign(d) * mm), 0);
@@ -799,7 +823,7 @@ function placeWorm(w, rt) {
     }
     x = w.px; y = w.py; ang = w.pa;
   } else if (w.isMe) w.pa = undefined;
-  w.x = x; w.y = y; w.angle = ang; w.mass = m; w.kills = e[6] | 0;
+  w.x = x; w.y = y; w.angle = ang; w.mass = m; w.kills = e[6] | 0; w.mult = (e[7] || 100) / 100;
   if (!w.isMe) w.target = ang;
   if (m > w.maxMass) w.maxMass = m;
   applyFlags(w, f);
@@ -815,6 +839,7 @@ function placeWorm(w, rt) {
 
 /* ================= mensagens do servidor ================= */
 function onWelcome(m) {
+  orbWts = m.mode === 'turbo' ? TURBO_ORB_WEIGHTS : ORB_WEIGHTS;
   seed = m.seed | 0 || 1; tickMs = m.tickMs || 25; meId = m.me;
   for (const w of [...worms.values()]) dropWorm(w);
   myWormId = 0; me = null; myPowers = {};
@@ -912,7 +937,7 @@ function onMessage(m) {
     case 'w': onWelcome(m); break;
     case 's': onSnapshot(m); break;
     case 'you': myWormId = m.w; { const w = worms.get(m.w); if (w) { w.isMe = true; me = w; } } startPlaying(); break;
-    case 'r': roster = Array.isArray(m.p) ? m.p : []; renderLobby(); break;
+    case 'r': roster = Array.isArray(m.p) ? m.p : []; roomN = m.n && typeof m.n === 'object' ? m.n : roomN; renderLobby(); renderModes(); break;
     case 'b': for (const q of m.w || []) { const w = worms.get(q[0]); if (w) w.pendingPoly = q[1]; } break;
     case 'p': { const r = performance.now() - m.c; rttAvg = rttAvg ? rttAvg * .6 + r * .4 : r; rtt = Math.round(rttAvg); break; }
     case 'old': conn = 'old'; renderLobby(true); break;
@@ -924,7 +949,18 @@ function onMessage(m) {
 
 /* ================= conexão ================= */
 let ws = null, conn = 'connecting', retry = 0, pingT = 0;
-const roomName = 'geral';   // uma toca só para todo mundo
+// duas tocas: normal e modo Turbo (cada Turbo soma velocidade até a minhoca morrer)
+const MODE_Q = /[?&]modo=(turbo|normal)\b/.exec(location.search);
+let mode = MODE_Q ? MODE_Q[1] : store.get('minhocaos.mode', 'normal') === 'turbo' ? 'turbo' : 'normal';
+let roomName = mode === 'turbo' ? 'turbo' : 'geral', roomN = {};
+function setMode(m) {
+  if (m === mode) return;
+  mode = m; roomName = m === 'turbo' ? 'turbo' : 'geral'; store.set('minhocaos.mode', m);
+  renderModes();
+  const s = ws; ws = null; roster = [];
+  if (s) { try { s.close(); } catch (e) {} }
+  retry = 0; connect();
+}
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 function wsUrl() {
   const m = /[?&]server=([^&#]+)/.exec(location.search);
@@ -968,9 +1004,9 @@ function updateParts(dt) {
 }
 
 /* ================= entrada ================= */
-const input = { aim: false, mx: 0, my: 0, bm: false, bk: false, bt: false, bt2: false, left: false, right: false };
+const input = { aim: false, mx: 0, my: 0, bm: false, bk: false, sp: false, sh: false, sb: false, bt: false, bt2: false, left: false, right: false };
 let steerId = null; const extraTouch = new Set();
-let wantAngle = null, wantBoost = false, lastSent = { a: null, b: null, t: 0 };
+let wantAngle = null, wantBoost = false, wantSuper = false, wantSaw = false, lastSent = { a: null, b: null, s: 0, t: 0 };
 cv.addEventListener('pointerdown', e => {
   ensureAudio();
   if (e.pointerType === 'mouse') { input.mx = e.clientX; input.my = e.clientY; input.aim = true; if (e.button === 0) input.bm = true; }
@@ -996,12 +1032,21 @@ const bOff = () => { input.bt = false; bb.classList.remove('on'); };
 bb.addEventListener('pointerdown', bOn);
 bb.addEventListener('pointerup', bOff); bb.addEventListener('pointercancel', bOff); bb.addEventListener('pointerleave', bOff);
 bb.addEventListener('contextmenu', e => e.preventDefault());
+// botão da serra (celular, só com a pele Demônio)
+const sb = $('#sawBtn'); sb.innerHTML = iconSVG('serra');
+const sOn = e => { e.preventDefault(); ensureAudio(); input.sb = true; sb.classList.add('on'); };
+const sOff = () => { input.sb = false; sb.classList.remove('on'); };
+sb.addEventListener('pointerdown', sOn);
+sb.addEventListener('pointerup', sOff); sb.addEventListener('pointercancel', sOff); sb.addEventListener('pointerleave', sOff);
+sb.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
   const tag = e.target && e.target.tagName;
   if (tag === 'INPUT') return;
   const k = e.key;
-  if (k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W') { if (tag !== 'BUTTON' || state === 'play') { input.bk = true; e.preventDefault(); } }
+  if (k === ' ') { if (tag !== 'BUTTON' || state === 'play') { input.sp = true; e.preventDefault(); } }
+  else if (k === 'Shift') input.sh = true;
+  else if (k === 'ArrowUp' || k === 'w' || k === 'W') { if (tag !== 'BUTTON' || state === 'play') { input.bk = true; e.preventDefault(); } }
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { input.left = true; e.preventDefault(); }
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') { input.right = true; e.preventDefault(); }
   else if (k === 'm' || k === 'M') toggleSound();
@@ -1009,18 +1054,21 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   const k = e.key;
-  if (k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W') input.bk = false;
+  if (k === ' ') input.sp = false;
+  else if (k === 'Shift') input.sh = false;
+  else if (k === 'ArrowUp' || k === 'w' || k === 'W') input.bk = false;
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') input.left = false;
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') input.right = false;
 });
-window.addEventListener('blur', () => { input.bm = input.bk = input.bt = input.bt2 = input.left = input.right = false; bb.classList.remove('on'); });
+window.addEventListener('blur', () => { input.bm = input.bk = input.sp = input.sh = input.sb = input.bt = input.bt2 = input.left = input.right = false; bb.classList.remove('on'); sb.classList.remove('on'); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); send({ t: 'sync' }); } });
 
 function control(now) {
   if (!me || !me.alive || !me.seen || state !== 'play') return;
   if (wantAngle === null) wantAngle = me.angle;   // nasce indo para o centro até você mexer
   const dbg = window.__mh;
-  if (dbg && dbg.force != null) { wantAngle = dbg.force; wantBoost = !!dbg.forceBoost; }
+  const demon = !!me.demon;
+  if (dbg && dbg.force != null) { wantAngle = dbg.force; wantBoost = !!dbg.forceBoost; wantSuper = demon && !!dbg.forceSuper; wantSaw = demon && !!dbg.forceSaw; }
   else {
     if (input.left !== input.right) { input.aim = false; wantAngle = me.angle + (input.right ? .9 : -.9); }
     else if (input.aim) {
@@ -1028,12 +1076,15 @@ function control(now) {
       const dx = input.mx - sx, dy = input.my - sy;
       if (dx * dx + dy * dy > 16) wantAngle = Math.atan2(dy, dx);
     }
-    wantBoost = input.bm || input.bk || input.bt || input.bt2;
+    // pele Demônio: Espaço liga a serra e Shift dá o turbo do demônio (no celular: botão da serra e o botão amarelo)
+    wantSaw = demon && (input.sp || input.sb);
+    wantSuper = demon && (input.sh || input.bt);
+    wantBoost = input.bm || input.bk || input.bt2 || (!demon && (input.sp || input.bt));
   }
   me.target = wantAngle;
-  const a = Math.round(angDiff(wantAngle, 0) * 100), b = wantBoost ? 1 : 0;
-  if (((a !== lastSent.a || b !== lastSent.b) && now - lastSent.t > 45) || now - lastSent.t > 400) {
-    send({ t: 'in', a, b }); lastSent = { a, b, t: now };
+  const a = Math.round(angDiff(wantAngle, 0) * 100), b = wantSuper ? 2 : wantBoost ? 1 : 0, sw = wantSaw ? 1 : 0;
+  if (((a !== lastSent.a || b !== lastSent.b || sw !== lastSent.s) && now - lastSent.t > 45) || now - lastSent.t > 400) {
+    send(sw ? { t: 'in', a, b, s: 1 } : { t: 'in', a, b }); lastSent = { a, b, s: sw, t: now };
   }
 }
 
@@ -1092,6 +1143,7 @@ function updateCamera(dt) {
     if (attract) { const k = 1 - Math.pow(.05, dt); cam.x += (attract.x - cam.x) * k; cam.y += (attract.y - cam.y) * k; }
     tz = base * .72;
   }
+  if (me && me.alive && me.mult > 1) tz /= Math.min(1.7, Math.sqrt(me.mult));
   if (window.__mh && window.__mh.zoom) tz = window.__mh.zoom;
   cam.z += (tz - cam.z) * (1 - Math.pow(.25, dt));
 }
@@ -1195,7 +1247,7 @@ function demonEmbers(dt) {
     if (!w.demon || !w.alive || !w.seen || !inView(w.x, w.y, 700)) continue;
     const n = w.pts.length; if (!n) continue;
     const r = radiusOf(w.mass);
-    let c = dt * (12 + n * .12);
+    let c = dt * (12 + n * .12) * (w.superOn ? 3 : 1);
     while (c > 0) {
       if (c < 1 && Math.random() > c) break;
       c -= 1;
@@ -1264,8 +1316,8 @@ function drawWorm(w) {
     drawDevilTail(w, r);
   }
   if (w.boosting) {
-    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .45;
-    const g = glowSprite(w.powers.turbo ? '#ffd23f' : w.demon ? '#ff3a12' : w.skin[0]), gs = r * 2.7;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = w.superOn ? .8 : .45;
+    const g = glowSprite(w.powers.turbo ? '#ffd23f' : w.demon ? '#ff3a12' : w.skin[0]), gs = r * (w.superOn ? 3.3 : 2.7);
     for (let i = 0; i < n; i += 2) { const p = pts[i]; if (inView(p.x, p.y, gs)) ctx.drawImage(g, p.x - gs, p.y - gs, gs * 2, gs * 2); }
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
@@ -1288,10 +1340,11 @@ function drawWorm(w) {
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
   if (!head) return;
-  if (w.powers.serra) {
-    ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(time * 12);
-    const s = r * 1.6 / 10.8; ctx.scale(s, s); ctx.translate(-12, -12);
-    ctx.fillStyle = POWERS.serra.color; ctx.fill(P2D.serra, 'evenodd'); ctx.restore();
+  if (w.powers.serra || w.dsaw) {
+    ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(time * (w.dsaw ? 18 : 12));
+    const s = r * (w.dsaw ? 1.85 : 1.6) / 10.8; ctx.scale(s, s); ctx.translate(-12, -12);
+    if (w.dsaw) { ctx.shadowColor = '#ff2a0a'; ctx.shadowBlur = 14; }
+    ctx.fillStyle = w.dsaw ? '#ff3b1a' : POWERS.serra.color; ctx.fill(P2D.serra, 'evenodd'); ctx.restore();
   }
   if (w.powers.lento) {
     ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(time * .8);
@@ -1528,7 +1581,7 @@ function toast(html, col) {
   const t = performance.now();
   if (html === lastToast && t - lastToastAt < 1500) return;
   lastToast = html; lastToastAt = t;
-  const d = document.createElement('div'); d.className = 'toast'; d.style.setProperty('--c', col); d.innerHTML = html;
+  const d = document.createElement('div'); d.className = 'toast'; d.style.setProperty('--c', col); d.innerHTML = `<span>${html}</span>`;   // um bloco só: o flex não separa as palavras em negrito
   el.toasts.appendChild(d);
   while (el.toasts.children.length > 3) el.toasts.firstChild.remove();
   setTimeout(() => d.remove(), 2700);
@@ -1544,7 +1597,7 @@ function setChip(key, rem, dur, col, label, iconKey) {
       el.chips.appendChild(c); chipEls[key] = c; c._sec = c.querySelector('.sec');
     }
     c.style.setProperty('--p', clamp(rem / dur, 0, 1).toFixed(3));
-    const s = key === 'frio' ? 'lento' : Math.ceil(rem) + 's';
+    const s = key === 'frio' ? 'lento' : key === 'vel' ? '×' + (me ? me.mult : 1).toFixed(2).replace('.', ',').replace(/,?0+$/, '') : Math.ceil(rem) + 's';
     if (c._sec.textContent !== s) c._sec.textContent = s;
   } else if (c) { c.remove(); delete chipEls[key]; }
 }
@@ -1552,6 +1605,8 @@ function updateChips() {
   const alive = me && me.alive;
   for (const k of PKEYS) if (POWERS[k].dur) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
   setChip('frio', alive && me.frozen > 0 && !myPowers.gelo ? 1 : 0, 1, '#7fe7ff', 'Congelado por outra minhoca', 'gelo');
+  setChip('vel', alive && me.mult > 1 ? 1 : 0, 1, '#ffd23f', 'Velocidade acumulada no modo Turbo', 'turbo');
+  sb.hidden = !(alive && me.demon && state === 'play');
 }
 function othersOnline() { return roster.filter(p => p[0] !== meId); }
 function updateBoard() {
@@ -1592,14 +1647,14 @@ function renderLobby(force) {
   if (conn === 'connecting') { dotCls += ' wait'; text = 'Conectando ao servidor…'; }
   else if (conn === 'offline') { dotCls += ' wait'; text = 'Sem conexão com o servidor'; note = 'Tentando de novo em instantes.'; }
   else if (conn === 'old') { text = 'Tem uma versão nova do jogo'; note = 'Recarregue a página para entrar.'; }
-  else if (conn === 'full') { text = 'Esta toca está cheia'; note = 'Crie uma sala privada para jogar com a sua turma.'; }
+  else if (conn === 'full') { text = 'Esta toca está cheia'; note = 'Tente o outro modo.'; }
   else if (!others.length) { dotCls += ' on'; text = 'Online. Por enquanto só você.'; note = 'Mande o link desta sala para os amigos. Quem abrir entra na mesma toca que você.'; }
   else {
     dotCls += ' on';
     text = `Online · ${others.length} ${others.length === 1 ? 'amigo' : 'amigos'} na toca`;
     chips = others.map(p => `<li style="--c:#${/^[0-9a-f]{6}$/i.test(p[2]) ? p[2] : 'ff8a3d'}"><i></i><span>${esc(cleanName(p[1]))}</span><small>${p[3] ? 'jogando' : 'no menu'}</small></li>`).join('');
   }
-  const roomTxt = 'Sala <b>geral</b> (todos com o link do jogo)';
+  const roomTxt = mode === 'turbo' ? 'Toca do <b>modo Turbo</b>' : 'Toca <b>normal</b>';
   const key = dotCls + '|' + text + '|' + note + '|' + chips + '|' + roomTxt;
   el.playBtn.disabled = conn !== 'online';
   if (!force && key === lobbyKey) return;
@@ -1609,7 +1664,10 @@ function renderLobby(force) {
   el.friends.hidden = !chips; el.friends.innerHTML = chips;
   el.roomRow.hidden = false; el.roomName.innerHTML = roomTxt;
 }
-function roomLink() { return location.href.split('#')[0]; }
+function roomLink() {
+  try { const u = new URL(location.href.split('#')[0]); u.searchParams.delete('debug'); if (mode === 'turbo') u.searchParams.set('modo', 'turbo'); else u.searchParams.delete('modo'); return u.toString(); }
+  catch (e) { return location.href.split('#')[0]; }
+}
 
 /* ================= telas ================= */
 function myName() { return cleanName(el.name.value); }
@@ -1624,7 +1682,7 @@ function requestPlay() {
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send(Object.assign({ t: 'play' }, look()));
 }
-let lastRank = 99, kingT = -99, milestone = 0;
+let lastRank = 99, kingT = -99, milestone = 0, turboTold = false;
 function flash(text, col) {
   el.flashText.textContent = text; el.flash.style.setProperty('--fc', col);
   el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
@@ -1636,6 +1694,8 @@ function startPlaying() {
   state = 'play'; input.aim = false; wantAngle = null; lastSent = { a: null, b: null, t: 0 };
   el.menu.hidden = true; el.over.hidden = true; el.hud.hidden = false;
   el.toasts.innerHTML = ''; hudT = 0; mmT = 0;
+  if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: cada Turbo soma velocidade até você morrer', '#ffd23f'); }
+  if (SKINS[skinIdx].lock && demonPw) toast(coarse ? 'Demônio: botão vermelho liga a serra · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> liga a serra · <b>Shift</b> turbo do demônio', '#ff3b1a');
   updateBoard();
 }
 function playerDied(by, cause) {
@@ -1696,7 +1756,7 @@ const LOCK_SVG = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><path
 function selectSkin(i) {
   skinIdx = i; store.set('minhocaos.skin2', skinStr(SKINS[i].c));
   for (const x of document.querySelectorAll('.skin')) x.setAttribute('aria-checked', String(x.id === 'skin-' + i));
-  sendName();
+  sendName(); if (typeof updateKeysHint === 'function') updateKeysHint();
 }
 function demonLabel() {
   const b = $('#skin-' + DEMON_IDX); if (!b) return;
@@ -1775,9 +1835,26 @@ function onDemonReply(ok) {
 el.demonOk.addEventListener('click', tryDemon);
 el.demonIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tryDemon(); } });
 const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
-$('#keysHint').innerHTML = coarse
-  ? 'Toque e arraste para guiar. Segure o botão amarelo (ou um segundo dedo na tela) para acelerar.'
-  : '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> ou <kbd>Espaço</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>M</kbd> som';
+function updateKeysHint() {
+  const demon = !!SKINS[skinIdx].lock;
+  $('#keysHint').innerHTML = coarse
+    ? 'Toque e arraste para guiar. Segure o botão amarelo (ou um segundo dedo na tela) para acelerar.'
+      + (demon ? '<br><b class="dm-hint">Demônio:</b> o botão vermelho liga a serra e o amarelo vira o turbo do demônio.' : '')
+    : (demon
+      ? '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>M</kbd> som<br><b class="dm-hint">Demônio:</b> <kbd>Espaço</kbd> liga a serra · <kbd>Shift</kbd> turbo do demônio'
+      : '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> ou <kbd>Espaço</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>M</kbd> som');
+}
+updateKeysHint();
+function renderModes() {
+  for (const m of ['normal', 'turbo']) {
+    const b = $('#mode-' + m); if (!b) continue;
+    b.setAttribute('aria-checked', String(m === mode));
+    const n = roomN[m === 'turbo' ? 'turbo' : 'geral'] || 0;
+    b.querySelector('.mcount').textContent = n ? `${n} na toca` : 'ninguém na toca';
+  }
+}
+for (const m of ['normal', 'turbo']) $('#mode-' + m).addEventListener('click', () => setMode(m));
+renderModes();
 el.name.value = store.get('minhocaos.name', '');
 el.name.addEventListener('input', sendName);
 el.soundBtn.textContent = muted ? 'Som desligado' : 'Som ligado';
