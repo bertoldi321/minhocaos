@@ -54,6 +54,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-o
 .skins{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:6px}
 .skin{display:grid;justify-items:center;gap:6px;padding:10px 6px 8px;background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:12px;font-size:12px;font-weight:500;color:var(--ink-dim);min-width:0}
 .skin[aria-checked="true"]{border-color:var(--clay);background:rgba(255,138,61,.13);color:var(--ink)}
+.skin.face{grid-column:1/-1;grid-template-columns:40px 72px auto;align-items:center;justify-items:start;gap:12px;padding:8px 12px}
+.face-thumb{width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #2b261b}
 .skin.demon{grid-column:1/-1;grid-template-columns:72px auto 1fr;align-items:center;justify-items:start;gap:12px;padding:9px 12px;font-size:13px;font-weight:600;color:#ffb3a1;border-color:rgba(255,70,30,.3);background:linear-gradient(90deg,rgba(110,8,6,.5),rgba(0,0,0,.25) 70%)}
 .skin.demon[aria-checked="true"]{border-color:#ff3b1a;color:#ffe3da;background:linear-gradient(90deg,rgba(170,14,10,.55),rgba(40,4,4,.35) 75%);box-shadow:inset 0 0 22px rgba(255,40,10,.22),0 0 14px rgba(255,40,10,.18)}
 .skin.demon .pill{box-shadow:0 0 10px rgba(255,50,20,.45)}
@@ -310,7 +312,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
     </div>
     <div class="powers panel">
       <h2>Poderes</h2>
-      <p class="note">Aparecem como esferas brilhantes espalhadas pela toca. Coma uma para ativar; pegar outra igual renova o tempo. Ímã e Turbo aparecem toda hora; a Serra é raríssima. Cuidado com as armadilhas: Lerdeza, Cegueira e Veneno.</p>
+      <p class="note">Aparecem como esferas brilhantes espalhadas pela toca. Coma uma para ativar; pegar outra igual renova o tempo, e o Ímã soma o tempo. Ímã e Turbo aparecem toda hora; a Serra é raríssima. Cuidado com as armadilhas: Lerdeza, Cegueira e Veneno.</p>
       <ul id="legend"></ul>
     </div>
   </div>
@@ -340,10 +342,10 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 5;
+const PROTO = 6;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
-const FOOD_N = 1680, ORB_N = 28, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
+const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
 /* tudo é desenhado 90 ms no passado, no mesmo instante para todas as minhocas:
    o que você vê encostar é o que o servidor considerou */
 const INTERP = 60, OWN_DELAY = 60, EXTRAP = 200;
@@ -351,7 +353,7 @@ let rttAvg = 0;
 let predDt = 0;
 
 const POWERS = {
-  ima:    { name: 'Ímã',      color: '#ff5c8a', dur: 10, tag: 'frequente', desc: 'Puxa as bolinhas de um raio grande direto para a sua boca.' },
+  ima:    { name: 'Ímã',      color: '#ff5c8a', dur: 10, tag: 'frequente', desc: 'Puxa as bolinhas de um raio grande direto para a sua boca. Pegar mais de um soma o tempo.' },
   turbo:  { name: 'Turbo',    color: '#ffd23f', dur: 6,  tag: 'frequente', desc: 'Velocidade máxima sem gastar tamanho.' },
   fogo:   { name: 'Fogo',     color: '#ff4a2a', dur: 10, desc: 'Solta 6 bolas de fogo em volta de você. Quem bater a cabeça nelas morre. Você não se queima.' },
   serra:  { name: 'Serra',    color: '#ff8a3d', dur: 7,  tag: 'raríssima', desc: 'Sua cabeça corta o corpo de quem encostar. Acertou a cabeça, derrubou.' },
@@ -364,9 +366,9 @@ const POWERS = {
 };
 const PKEYS = Object.keys(POWERS);
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096;
-const ORB_WEIGHTS = [['ima', 30], ['turbo', 30], ['dobro', 7], ['cresce', 7], ['lento', 6], ['gelo', 6], ['fogo', 6], ['cego', 4], ['veneno', 3], ['serra', 1]];
+const ORB_WEIGHTS = [['ima', 40], ['turbo', 25], ['dobro', 7], ['cresce', 6], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
-const TURBO_ORB_WEIGHTS = [['turbo', 50], ['ima', 20], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
+const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 let orbWts = ORB_WEIGHTS;   // no modo Turbo as esferas de Turbo aparecem mais
 function orbType(r) { let x = r * 100; for (const [k, w] of orbWts) { x -= w; if (x < 0) return k; } return 'ima'; }
 // velocidade de uma minhoca (igual à conta do servidor); sf = multiplicador acumulado do modo Turbo
@@ -381,6 +383,7 @@ const SKINS = [
   { name: 'Pimenta',  c: ['#e63946', '#ffd6a5'] },
   { name: 'Aurora',   c: ['#a0c4ff', '#bdb2ff', '#ffc6ff'] },
   { name: 'Carvão',   c: ['#e8e1d9', '#4d4152'] },
+  { name: 'Cabeção',  c: ['#c49a6c', '#2b261b'], face: true },
   // peles de bandeira: compradas com gold (o servidor confere)
   { name: 'Brasil',           c: ['#009c3b', '#ffdf00', '#002776'], gold: 'br', price: 100 },
   { name: 'México',           c: ['#006847', '#f4f1ea', '#ce1126'], gold: 'mx', price: 150 },
@@ -398,6 +401,7 @@ const SKIN_STYLE = {
   '0055a4f4f1eaef4135': { body: ['#0055a4', '#f4f1ea', '#ef4135'] },
   '1f1a1add0000ffce00': { body: ['#1f1a1a', '#dd0000', '#ffce00'] },
   '3c3b6ef4f1eab22234': { body: ['#b22234', '#f4f1ea'], neck: '#3c3b6e', neckN: 13, head: '#3c3b6e' },
+  'c49a6c2b261b': { body: ['#c49a6c', '#2b261b'], face: true },
   'd9101cf4f1eaf2c14e': { body: ['#d9101c', '#f4f1ea'], stars: { band: 1, col: '#d9101c', size: .46 }, head: '#f4f1ea', headStar: '#d9101c' },
 };
 const ICE = ['#d2f6ff', '#8fd9f2'], TOXIC = ['#a6e22e', '#5c9a12'];
@@ -881,6 +885,7 @@ function applyEvent(e) {
       if (w && w.isMe && type) {
         const P = POWERS[type];
         if (type === 'cresce') toast(`<b>Crescer</b> deixou sua minhoca 20% maior`, P.color);
+        else if (type === 'ima') { const left = +e[5] || P.dur; myPowers.ima = left; toast(left > P.dur + .5 ? `<b>Ímã</b> +${P.dur} s · faltam ${Math.ceil(left)} s` : `<b>Ímã</b> por ${P.dur} segundos`, P.color); }
         else if (type === 'turbo' && mode === 'turbo') { myStack++; toast(`<b>Turbo ×${myStack}</b>: não acaba mais`, P.color); }
         else {
           myPowers[type] = P.dur;
@@ -1259,6 +1264,17 @@ function demonEmbers(dt) {
     }
   }
 }
+/* ---------- pele Cabeção: a cabeça é a foto, sempre em pé ---------- */
+const FACE_SRC = 'data:image/jpeg;base64,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';
+const faceImg = new Image(); let faceSpr = null;
+faceImg.onload = () => {
+  const S = 160, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.save(); g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 6, 0, TAU); g.clip(); g.drawImage(faceImg, 6, 6, S - 12, S - 12); g.restore();
+  g.lineWidth = 6; g.strokeStyle = '#2b261b'; g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 3, 0, TAU); g.stroke();
+  faceSpr = c;
+};
+faceImg.src = FACE_SRC;
 /* ---------- enfeites das peles de bandeira ---------- */
 function starPath(x, y, R, rot) {
   ctx.beginPath();
@@ -1356,17 +1372,22 @@ function drawWorm(w) {
     ctx.strokeStyle = 'rgba(141,255,154,.75)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(w.x, w.y, r * (1.55 + .12 * Math.sin(time * 6)), 0, TAU); ctx.stroke();
   }
-  const hr = r * 1.06;
-  ctx.drawImage(segSprite(st && st.head ? st.head : cols[0]), w.x - hr, w.y - hr, hr * 2, hr * 2);
+  const hr = r * 1.06, face = w.style && w.style.face && faceSpr;
+  if (face) {
+    // pele Cabeção: a foto no lugar da cabeça, maior e sempre em pé
+    const fr = r * 1.9; ctx.drawImage(faceSpr, w.x - fr, w.y - fr, fr * 2, fr * 2);
+    if (frozen) { ctx.fillStyle = 'rgba(160,230,255,.35)'; dot(w.x, w.y, fr * .95); }
+    else if (w.powers.veneno) { ctx.fillStyle = 'rgba(166,226,46,.3)'; dot(w.x, w.y, fr * .95); }
+  } else ctx.drawImage(segSprite(st && st.head ? st.head : cols[0]), w.x - hr, w.y - hr, hr * 2, hr * 2);
   if (st && st.headStar) { ctx.fillStyle = st.headStar; starPath(w.x - Math.cos(w.angle) * r * .34, w.y - Math.sin(w.angle) * r * .34, r * .5, w.angle); ctx.fill(); }
   const ca = Math.cos(w.angle), sa = Math.sin(w.angle), lc = Math.cos(w.target), ls = Math.sin(w.target);
   if (demon) drawDemonHead(w, r, ca, sa, lc, ls);
-  else for (let sg = -1; sg <= 1; sg += 2) {
+  else if (!face) for (let sg = -1; sg <= 1; sg += 2) {
     const ex = w.x + ca * r * .32 - sa * sg * r * .46, ey = w.y + sa * r * .32 + ca * sg * r * .46;
     ctx.fillStyle = '#fffaf3'; dot(ex, ey, r * .34);
     ctx.fillStyle = frozen ? '#3a6f86' : '#160c18'; dot(ex + lc * r * .12, ey + ls * r * .12, r * .19);
   }
-  if (w === topWorm) drawCrown(w.x, w.y, r);
+  if (w === topWorm) drawCrown(w.x, w.y, face ? r * 1.85 : r);
   if (w.powers.cego) {
     // venda nos olhos
     const bx = w.x + ca * r * .32, by = w.y + sa * r * .32;
@@ -1495,7 +1516,7 @@ function render() {
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,9,18,.75)'; ctx.lineJoin = 'round';
   for (const w of worms.values()) {
     if (!w.alive || !w.seen) continue;
-    const r = radiusOf(w.mass), sx = (w.x - cam.x) * z + W / 2, sy = (w.y - cam.y) * z + H / 2 + r * z * 1.35 + 6;
+    const r = radiusOf(w.mass), sx = (w.x - cam.x) * z + W / 2, sy = (w.y - cam.y) * z + H / 2 + r * z * (w.style && w.style.face ? 2.15 : 1.35) + 6;
     if (sx < -80 || sx > W + 80 || sy < -30 || sy > H + 30) continue;
     ctx.font = w === me ? '600 12px Rubik, system-ui, sans-serif' : '700 13px Rubik, system-ui, sans-serif';
     ctx.fillStyle = w === me ? '#ffc496' : '#ffffff';
@@ -1773,7 +1794,8 @@ SKINS.forEach((s, i) => {
   const b = document.createElement('button');
   b.type = 'button'; b.className = s.lock ? 'skin demon' : s.gold ? 'skin gold' : 'skin'; b.id = 'skin-' + i;
   b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(i === skinIdx));
-  b.innerHTML = `<span class="pill" style="background:${pillBg(s)}"></span><span class="sk-name">${s.name}</span>`
+  if (s.face) b.className = 'skin face';
+  b.innerHTML = (s.face ? `<img class="face-thumb" src="${FACE_SRC}" alt="">` : '') + `<span class="pill" style="background:${pillBg(s)}"></span><span class="sk-name">${s.name}</span>`
     + (s.lock ? '<span class="dm-tag"></span>' : s.gold ? `<span class="price"><i class="coin" aria-hidden="true"></i>${s.price}</span>` : '');
   b.addEventListener('click', () => {
     el.demonBox.hidden = true; el.buyBox.hidden = true; buyIdx = -1;

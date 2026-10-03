@@ -22,18 +22,18 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 5;
+const PROTO = 6;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
-const FOOD_N = 1680, ORB_N = 28;
+const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
 const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
 const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6 };
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096;
-const ORB_WEIGHTS = [['ima', 30], ['turbo', 30], ['dobro', 7], ['cresce', 7], ['lento', 6], ['gelo', 6], ['fogo', 6], ['cego', 4], ['veneno', 3], ['serra', 1]];
-const TURBO_ORB_WEIGHTS = [['turbo', 50], ['ima', 20], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
+const ORB_WEIGHTS = [['ima', 40], ['turbo', 25], ['dobro', 7], ['cresce', 6], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
+const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
 /* bolas de fogo: saem da cabeça de quem pegou o poder, se espalham e ficam paradas queimando */
@@ -228,6 +228,7 @@ class Room {
     if (type === 'turbo' && this.mode === 'turbo') { w.stack = (w.stack || 0) + 1; w.powers.turbo = Infinity; return; }
     if (type === 'fogo') this.spawnFire(w);
     if (type === 'veneno') w.poison = w.mass * POISON_LOSS / POWER_DUR.veneno;   // perde 20% aos poucos
+    if (type === 'ima') { w.powers.ima = (w.powers.ima || 0) + POWER_DUR.ima; return; }   // Ímã soma o tempo
     if (POWER_DUR[type]) w.powers[type] = POWER_DUR[type];
   }
   spawnFire(w) {
@@ -435,7 +436,8 @@ class Room {
           this.applyPower(w, o.type);
           const g = this.orbGens[i] >= 4095 ? 1 : this.orbGens[i] + 1;
           this.orbGens[i] = g; this.orbs[i] = orbFor(this.seed, i, g, this.time, this.weights);
-          this.events.push(['o', i, g, w.id, o.type]);
+          const left = w.powers[o.type];
+          this.events.push(['o', i, g, w.id, o.type, left && isFinite(left) ? Math.round(left * 10) / 10 : 0]);   // tempo que sobrou (o Ímã soma)
           break;
         }
       }
