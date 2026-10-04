@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 6;
+const PROTO = 7;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
@@ -30,10 +30,12 @@ const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
 const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
-const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6 };
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096;
-const ORB_WEIGHTS = [['ima', 40], ['turbo', 25], ['dobro', 7], ['cresce', 6], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
-const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 7], ['cresce', 7], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
+const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6, inverte: 6 };
+const INV_R = 560, INV_LINGER = 2.5;        // Inversão: quem chega perto fica com os comandos invertidos (e mais 2,5 s depois de sair)
+const LASER_LEN = 950, LASER_W = 10, LASER_CD = 4;   // laser da pele Demônio (tecla 1)
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384;
+const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
+const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 5], ['cresce', 5], ['inverte', 4], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
 /* bolas de fogo: saem da cabeça de quem pegou o poder, se espalham e ficam paradas queimando */
@@ -119,7 +121,7 @@ function encodePoly(w) {
 }
 function flagsOf(w) {
   let f = 0; for (const k in w.powers) if (PBIT[k]) f |= PBIT[k];
-  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; return f;
+  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; return f;
 }
 
 /* ================= sala ================= */
@@ -249,6 +251,14 @@ class Room {
     const list = this.list; list.length = 0;
     for (const w of this.worms.values()) list.push(w);
     for (const w of list) {
+      if (!w.powers.inverte) continue;
+      for (const o of list) {
+        if (o === w) continue;
+        const dx = o.x - w.x, dy = o.y - w.y;
+        if (dx * dx + dy * dy < INV_R * INV_R) o.inverted = Math.max(o.inverted || 0, INV_LINGER);
+      }
+    }
+    for (const w of list) {
       if (!w.powers.gelo) continue;
       for (const o of list) {
         if (o === w) continue;
@@ -351,6 +361,8 @@ class Room {
     const P = w.powers;
     for (const k in P) { P[k] -= dt; if (P[k] <= 0) delete P[k]; }
     if (w.frozen > 0) w.frozen -= dt;
+    if (w.inverted > 0) w.inverted -= dt;
+    if (w.laserCd > 0) w.laserCd -= dt;
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
     // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
@@ -364,7 +376,8 @@ class Room {
     if (fz) spd *= SLOW;
     w.lastSpd = spd;
     let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (fz) tr *= .5;
-    const d = angDiff(w.target, w.angle), m = tr * dt;
+    let d = angDiff(w.target, w.angle); if (w.inverted > 0) d = -d;   // comandos invertidos: vira para o outro lado
+    const m = tr * dt;
     w.angle = angDiff(w.angle + (Math.abs(d) < m ? d : Math.sign(d) * m), 0);
     w.x += Math.cos(w.angle) * spd * dt; w.y += Math.sin(w.angle) * spd * dt;
     // corpo: cada gomo segue o caminho da cabeça
@@ -510,7 +523,7 @@ class Room {
     if (add) c.gold = Math.min(9999999, c.gold + add);
     c.sendGold({ add, rank, life: Math.floor(life), min: GOLD_MIN_LIFE });
   }
-  cut(o, i, by) {
+  cut(o, i, by, cause) {
     const pts = o.pts; if (i - 1 >= pts.length) return;
     const total = pts.length + 1, removed = pts.splice(i - 1);
     let newMass = o.mass * (1 - removed.length / total);
@@ -518,8 +531,28 @@ class Room {
     const lost = Math.max(1, Math.round(o.mass - newMass)); o.mass = newMass;
     const n = clamp(Math.round(lost / 8), 2, 50);
     this.bodyDrops(o, removed, n, Math.max(1, lost * .65 / n));
-    this.events.push(['c', o.id, i, by.id]);
-    if (o.mass < 14) this.kill(o, by, 'saw');
+    this.events.push(cause ? ['c', o.id, i, by.id, cause] : ['c', o.id, i, by.id]);
+    if (o.mass < 14) this.kill(o, by, cause || 'saw');
+  }
+  // laser da pele Demônio: um raio reto da cabeça para a frente; atravessa tudo até a borda
+  fireLaser(w) {
+    if (!w.alive || w.skin !== DEMON_SK || (w.laserCd || 0) > 0) return;
+    w.laserCd = LASER_CD;
+    const c = Math.cos(w.angle), s = Math.sin(w.angle), r = radiusOf(w.mass);
+    const x0 = w.x + c * r, y0 = w.y + s * r;
+    let len = LASER_LEN;
+    const b = x0 * c + y0 * s, disc = b * b - (x0 * x0 + y0 * y0 - WORLD_R * WORLD_R);
+    if (disc > 0) len = Math.max(0, Math.min(len, -b + Math.sqrt(disc)));
+    const hits = [];
+    for (const o of this.worms.values()) {
+      if (o === w || !o.alive) continue;
+      const ro = radiusOf(o.mass) * .9 + LASER_W, ro2 = ro * ro;
+      const near = (px, py) => { const t = clamp((px - x0) * c + (py - y0) * s, 0, len), dx = x0 + c * t - px, dy = y0 + s * t - py; return dx * dx + dy * dy < ro2; };
+      if (near(o.x, o.y)) { hits.push([o, 0]); continue; }
+      for (let i = 0; i < o.pts.length; i++) if (near(o.pts[i].x, o.pts[i].y)) { hits.push([o, i + 1]); break; }
+    }
+    this.events.push(['L', w.id, Math.round(x0), Math.round(y0), Math.round(x0 + c * len), Math.round(y0 + s * len)]);
+    for (const [o, i] of hits) { if (!o.alive) continue; if (i <= 2) this.kill(o, w, 'laser'); else this.cut(o, i, w, 'laser'); }
   }
   broadcast() {
     const w = [];
@@ -685,6 +718,9 @@ class Client {
         break;
       case 'in':
         if (this.worm && this.worm.alive && num(m.a) && Math.abs(m.a) < 2000) { this.worm.target = m.a / 100; this.worm.wantBoost = !!m.b; this.worm.wantSuper = m.b === 2; this.worm.wantSaw = !!m.s; }
+        break;
+      case 'laser':
+        if (this.worm && this.room) this.room.fireLaser(this.worm);
         break;
       case 'sync':
         if (this.room) this.room.sendBodies(this);
