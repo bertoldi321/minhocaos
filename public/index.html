@@ -68,26 +68,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-o
 .demon-ok:active{transform:translateY(2px);box-shadow:0 1px 0 #5e0807}
 .demon-msg{grid-column:1/-1;margin:0;font-size:13px;color:#ff9a85}
 .demon-msg:empty{display:none}
-.gold-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}
-.gold-bal{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-dim)}
-.gold-bal b{color:#ffd23f;font-variant-numeric:tabular-nums}
-.coin{display:inline-block;flex:none;width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3b0,#ffd23f 45%,#c98a0b);box-shadow:inset 0 0 0 1.5px rgba(122,74,5,.55)}
-.gold-grid{grid-template-columns:minmax(0,1fr)}
-.skin.gold{grid-template-columns:44px minmax(0,1fr) auto;align-items:center;justify-items:start;gap:12px;padding:10px 12px;text-align:left}
-.skin.gold .sk-name{text-align:left;font-size:14px;font-weight:600;color:var(--ink)}
+.pow-grid{grid-template-columns:minmax(0,1fr)}
+.skin.pow{grid-template-columns:44px minmax(0,1fr);align-items:center;justify-items:start;gap:12px;padding:10px 12px;text-align:left}
+.skin.pow .sk-name{text-align:left;font-size:14px;font-weight:600;color:var(--ink)}
 .pw-txt{display:grid;gap:2px;min-width:0}
 .pw-txt small{font-size:12px;line-height:1.35;color:var(--ink-dim)}
 .logo-thumb{width:44px;height:44px;border-radius:50%;padding:7px;object-fit:contain;background:var(--bg);border:2px solid var(--ring)}
-.skin.gold.locked .logo-thumb{filter:saturate(.6) brightness(.8)}
-.skin.gold.locked .sk-name{color:var(--ink-dim)}
-.price{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#ffd23f;font-variant-numeric:tabular-nums}
-.skin.gold:not(.locked) .price{display:none}
-.buy-box{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;margin:-2px 0 4px;border-radius:12px;border:1px solid rgba(255,210,63,.3);background:rgba(255,210,63,.07)}
-.buy-text{margin:0;font-size:13.5px;line-height:1.45}
-.buy-text b{color:#ffd23f}
-.buy-rule{display:block;margin-top:4px;font-size:12px;color:var(--ink-dim)}
-.buy-btn{border:0;border-radius:10px;background:#ffd23f;color:#3a2600;font-weight:700;padding:10px 16px;box-shadow:0 3px 0 #a87a06}
-.buy-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #a87a06}
 .pill{position:relative;display:block;width:100%;height:16px;border-radius:999px;overflow:hidden}
 .pill::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.4),rgba(255,255,255,0) 45%,rgba(0,0,0,.28))}
 .pill::after{content:"";position:absolute;right:4px;top:3px;width:4px;height:4px;border-radius:50%;background:#fffaf3;box-shadow:0 6px 0 #fffaf3}
@@ -246,10 +232,6 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .ban-stats b{color:#1c1e21;font-variant-numeric:tabular-nums}
 .ban-rec{margin:4px 0 0;font-size:12.5px;color:#606770}
 .ban-rec.new{color:#1a7f37;font-weight:700}
-.ban-gold{margin:4px 0 0;display:flex;align-items:center;gap:6px;font-size:12.5px;color:#606770}
-.ban-gold:empty{display:none}
-.ban-gold.won{color:#8a5a00}
-.ban-gold b{color:#8a5a00}
 .ban-actions{display:flex;justify-content:flex-end;margin-top:16px}
 .ban-btn{border:0;border-radius:6px;background:#1877f2;color:#fff;font:600 15px Helvetica,Arial,system-ui,sans-serif;padding:10px 16px;text-align:center}
 .ban-btn:hover{background:#166fe5}
@@ -317,12 +299,8 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
         </div>
         <span class="lbl" id="skinLbl">Pele</span>
         <div class="skins" id="skins" role="radiogroup" aria-labelledby="skinLbl"></div>
-        <div class="gold-head"><span class="lbl" id="goldLbl">Peles com poderes</span><span class="gold-bal" title="Gold: ganhe terminando a partida entre os 5 primeiros"><i class="coin" aria-hidden="true"></i><b id="goldVal">0</b> gold</span></div>
-        <div class="skins gold-grid" id="goldSkins" role="radiogroup" aria-labelledby="goldLbl"></div>
-        <div class="buy-box" id="buyBox" hidden>
-          <p class="buy-text" id="buyText" role="status"></p>
-          <button type="button" class="buy-btn" id="buyBtn">Comprar</button>
-        </div>
+        <span class="lbl" id="powLbl">Peles com poderes</span>
+        <div class="skins pow-grid" id="powSkins" role="radiogroup" aria-labelledby="powLbl"></div>
         <div class="demon-pw" id="demonPw" hidden>
           <input id="demonIn" type="password" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Senha da pele Demônio" aria-label="Senha da pele Demônio">
           <button type="button" class="demon-ok" id="demonOk">Liberar</button>
@@ -361,7 +339,6 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
       <p class="ban-cause" id="overCause"></p>
       <p class="ban-stats">Tamanho <b id="sMax">0</b> · Abates <b id="sKills">0</b> · Tempo <b id="sTime">0:00</b> · Melhor posição <b id="sRank">—</b></p>
       <p class="ban-rec" id="sRecord"></p>
-      <p class="ban-gold" id="sGold"></p>
       <div class="ban-actions"><button class="ban-btn" id="againBtn" type="button">Compre BM com o Marcos, e comece novamente</button></div>
     </div>
   </div>
@@ -375,7 +352,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 8;
+const PROTO = 9;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -403,10 +380,10 @@ const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 
 const INV_R = 560;
 // poderes por tecla das peles (o servidor confere pele e recarga); a recarga só aparece depois de usar
 const ABIL_UI = {
-  laser: { key: '1',     name: 'Laser',       icon: 'laser',  col: '#ff3b1a', cd: 4 },
-  fogo:  { key: '3',     name: 'Fogo azul',   icon: 'fogo',   col: '#3aa8ff', cd: 12 },
-  boost: { key: '4',     name: 'Boost 3×',    icon: 'turbo',  col: '#ff6a3a', cd: 10 },
-  grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 45 },
+  laser: { key: '1',     name: 'Laser',       icon: 'laser',  col: '#ff3b1a', cd: 2 },
+  fogo:  { key: '3',     name: 'Fogo azul',   icon: 'fogo',   col: '#3aa8ff', cd: 4 },
+  boost: { key: '4',     name: 'Boost 3×',    icon: 'turbo',  col: '#ff6a3a', cd: 4 },
+  grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 1 },
   vturb: { key: 'Shift', name: 'Turbo VTURB', icon: 'turbo',  col: '#f20051', cd: 12 },
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
@@ -427,9 +404,9 @@ const SKINS = [
   { name: 'Aurora',   c: ['#a0c4ff', '#bdb2ff', '#ffc6ff'] },
   { name: 'Carvão',   c: ['#e8e1d9', '#4d4152'] },
   { name: 'Cabeção',  c: ['#c49a6c', '#2b261b'], face: true },
-  // peles com poderes: compradas com gold (o servidor confere)
-  { name: 'VTURB',      c: ['#ee492c', '#f0234a', '#f20051'], gold: 'vt', price: 200, logo: 'vt', power: 'Turbo 3× mais rápido que o do mapa. Aperte Shift (recarga de 12 s).' },
-  { name: 'Direct Ads', c: ['#1fa1cd', '#fa4e51'],            gold: 'da', price: 300, logo: 'da', power: 'A cada 1.000 pontos nascem 2 filhotes iguais a você. Eles não te machucam.' },
+  // peles com poderes (grátis)
+  { name: 'VTURB',      c: ['#ee492c', '#f0234a', '#f20051'], logo: 'vt', power: 'Turbo 3× mais rápido que o do mapa. Aperte Shift (recarga de 12 s).' },
+  { name: 'Direct Ads', c: ['#1fa1cd', '#fa4e51'],            logo: 'da', power: 'A cada 1.000 pontos nascem 2 filhotes iguais a você. Eles não te machucam.' },
   { name: 'Demônio',  c: ['#a8100c', '#1a0507'], lock: true },
 ];
 const DEMON_SK = 'a8100c1a0507', DEMON_IDX = SKINS.length - 1;
@@ -680,14 +657,11 @@ let meId = 0, myWormId = 0, me = null, myPowers = {}, prevFlags = 0;
 let state = 'menu', deadT = 0, stats = { start: 0, end: 0, bestRank: 99, maxMass: 30, kills: 0 }, death = null;
 let roster = [], rtt = 0;
 let demonPw = store.get('minhocaos.demon', ''), pendingPw = '';
-// carteira de gold: assinada pelo servidor; aqui só lemos o saldo para mostrar antes de conectar
-let wallet = store.get('minhocaos.wallet', ''), gold = 0, owned = new Set(), lastPrize = null, buyIdx = -1;
-{ const m = /^(\d+)\.([a-z,]*)\./.exec(wallet); if (m) { gold = +m[1]; owned = new Set(m[2] ? m[2].split(',') : []); } }
-const GOLD_RULE = '1º lugar ganha 30 · 2º, 20 · 3º, 10 · 4º e 5º, 5. Vale para partidas de 1 minuto ou mais.';
 // a pele escolhida fica guardada pelo código de cores (antes era pela posição na lista, e o 8 era o Demônio)
 let skinIdx = SKINS.findIndex(s => skinStr(s.c) === store.get('minhocaos.skin2', ''));
 if (skinIdx < 0) { const o = parseInt(store.get('minhocaos.skin', '0'), 10) || 0; skinIdx = o === 8 ? DEMON_IDX : clamp(o, 0, 7); }
-if ((SKINS[skinIdx].lock && !demonPw) || (SKINS[skinIdx].gold && !owned.has(SKINS[skinIdx].gold))) skinIdx = 0;
+if (SKINS[skinIdx].lock && !demonPw) skinIdx = 0;
+try { localStorage.removeItem('minhocaos.wallet'); } catch (e) {}   // o gold saiu do jogo
 function look() { const o = { n: myName(), k: skinStr(SKINS[skinIdx].c) }; if (demonPw) o.s = demonPw; return o; }
 const cam = { x: 0, y: 0, z: Math.sqrt(W * H) / 1150 };
 
@@ -1004,7 +978,6 @@ function onMessage(m) {
     case 'old': conn = 'old'; renderLobby(true); break;
     case 'full': conn = 'full'; renderLobby(true); break;
     case 'senha': onDemonReply(!!m.ok); break;
-    case 'gold': onGold(m); break;
     case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = +m.s || ABIL_UI[m.k].cd; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
     case 'pups': toast(`<b>${m.n | 0} ${m.n === 1 ? 'filhote nasceu' : 'filhotes nasceram'}</b>: eles não te machucam`, '#1fa1cd'); sfx('power'); break;
   }
@@ -1037,7 +1010,7 @@ function connect() {
   let s;
   try { s = new WebSocket(wsUrl()); } catch (e) { schedule(); return; }
   ws = s;
-  s.onopen = () => { retry = 0; s.send(JSON.stringify(Object.assign({ t: 'hi', v: PROTO, r: roomName, w: wallet || undefined }, look()))); };
+  s.onopen = () => { retry = 0; s.send(JSON.stringify(Object.assign({ t: 'hi', v: PROTO, r: roomName }, look()))); };
   s.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } try { onMessage(m); } catch (e) { console.error(e); } };
   s.onclose = () => {
     if (ws !== s) return;
@@ -1721,7 +1694,6 @@ const el = {
   ndot: $('#ndot'), netText: $('#netText'), friends: $('#friends'), netNote: $('#netNote'),
   flash: $('#flash'), flashText: $('#flashText'), perf: $('#perf'),
   demonBox: $('#demonPw'), demonIn: $('#demonIn'), demonOk: $('#demonOk'), demonMsg: $('#demonMsg'),
-  buyBox: $('#buyBox'), buyText: $('#buyText'), buyBtn: $('#buyBtn'), goldVal: $('#goldVal'),
 };
 let lastToast = '', lastToastAt = 0;
 function toast(html, col) {
@@ -1840,15 +1812,15 @@ function flash(text, col) {
 }
 function startPlaying() {
   lastRank = 99; milestone = 0; myStack = 0; cds = {};
-  stats = { start: time, end: 0, bestRank: 99, maxMass: 30, kills: 0 }; death = null; myPowers = {}; lastPrize = null;
+  stats = { start: time, end: 0, bestRank: 99, maxMass: 30, kills: 0 }; death = null; myPowers = {};
   state = 'play'; input.aim = false; wantAngle = null; lastSent = { a: null, b: null, t: 0 };
   el.menu.hidden = true; el.over.hidden = true; el.hud.hidden = false;
   el.toasts.innerHTML = ''; hudT = 0; mmT = 0;
   if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: o Turbo não acaba e se soma (1×, 2×, 3×…)', '#ffd23f'); }
   const sel = SKINS[skinIdx];
   if (sel.lock && demonPw) toast(coarse ? 'Demônio: botões de poder à esquerda · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> serra · <b>Shift</b> turbo · <b>1</b> laser · <b>3</b> fogo azul · <b>4</b> boost 3× · <b>5</b> triplicar', '#ff3b1a');
-  else if (sel.gold === 'vt' && owned.has('vt')) toast(coarse ? 'VTURB: botão à esquerda solta o turbo 3×' : 'VTURB: <b>Shift</b> solta o turbo 3×', '#f20051');
-  else if (sel.gold === 'da' && owned.has('da')) toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
+  else if (sel.logo === 'vt') toast(coarse ? 'VTURB: botão à esquerda solta o turbo 3×' : 'VTURB: <b>Shift</b> solta o turbo 3×', '#f20051');
+  else if (sel.logo === 'da') toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
   updateBoard();
 }
 function playerDied(by, cause) {
@@ -1875,12 +1847,6 @@ function showOver() {
   const rec = $('#sRecord');
   if (mine > best) { store.set('minhocaos.best', String(mine)); rec.textContent = 'Novo recorde!'; rec.classList.add('new'); }
   else { rec.textContent = `Seu recorde: ${fmt(best)}`; rec.classList.remove('new'); }
-  const gl = $('#sGold'), pz = lastPrize;
-  if (!pz) gl.textContent = '';
-  else if (pz.add > 0) gl.innerHTML = `<i class="coin" aria-hidden="true"></i><b>+${pz.add} gold</b> por terminar em ${pz.rank}º · saldo ${fmt(gold)}`;
-  else if (pz.life < pz.min) gl.textContent = `Sem gold: a partida durou menos de 1 minuto. Saldo ${fmt(gold)}.`;
-  else gl.textContent = `Sem gold: você terminou em ${pz.rank}º. Gold vai do 1º ao 5º lugar. Saldo ${fmt(gold)}.`;
-  gl.classList.toggle('won', !!(pz && pz.add > 0));
   el.hud.hidden = true; el.over.hidden = false;
   $('#againBtn').focus({ preventScroll: true });
 }
@@ -1921,62 +1887,27 @@ function pillBg(s) {
   const stripes = `repeating-linear-gradient(90deg,${c.map((x, k) => `${x} ${k * 10}px ${(k + 1) * 10}px`).join(',')})`;
   return st && st.neck ? `linear-gradient(90deg,${st.neck} 0 34%,transparent 34%),${stripes}` : stripes;
 }
-const goldEl = $('#goldSkins');
+const powEl = $('#powSkins');
 SKINS.forEach((s, i) => {
   const b = document.createElement('button');
-  b.type = 'button'; b.className = s.lock ? 'skin demon' : s.gold ? 'skin gold' : 'skin'; b.id = 'skin-' + i;
+  b.type = 'button'; b.className = s.lock ? 'skin demon' : s.logo ? 'skin pow' : 'skin'; b.id = 'skin-' + i;
   b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(i === skinIdx));
   if (s.face) b.className = 'skin face';
   if (s.logo) {
-    b.innerHTML = `<img class="logo-thumb" src="${LOGO_SRC[s.logo]}" alt="" style="--bg:${LOGO_BG[s.logo]};--ring:${LOGO_RING[s.logo]}"><span class="pw-txt"><span class="sk-name">${s.name}</span><small>${s.power}</small></span><span class="price"><i class="coin" aria-hidden="true"></i>${s.price}</span>`;
-    b.addEventListener('click', () => {
-      el.demonBox.hidden = true; el.buyBox.hidden = true; buyIdx = -1;
-      if (!owned.has(s.gold)) { openBuy(i); return; }
-      selectSkin(i);
-    });
-    goldEl.appendChild(b); return;
+    b.innerHTML = `<img class="logo-thumb" src="${LOGO_SRC[s.logo]}" alt="" style="--bg:${LOGO_BG[s.logo]};--ring:${LOGO_RING[s.logo]}"><span class="pw-txt"><span class="sk-name">${s.name}</span><small>${s.power}</small></span>`;
+    b.addEventListener('click', () => { el.demonBox.hidden = true; selectSkin(i); });
+    powEl.appendChild(b); return;
   }
   b.innerHTML = (s.face ? `<img class="face-thumb" src="${FACE_SRC}" alt="">` : '') + `<span class="pill" style="background:${pillBg(s)}"></span><span class="sk-name">${s.name}</span>`
-    + (s.lock ? '<span class="dm-tag"></span>' : s.gold ? `<span class="price"><i class="coin" aria-hidden="true"></i>${s.price}</span>` : '');
+    + (s.lock ? '<span class="dm-tag"></span>' : '');
   b.addEventListener('click', () => {
-    el.demonBox.hidden = true; el.buyBox.hidden = true; buyIdx = -1;
+    el.demonBox.hidden = true;
     if (s.lock && !demonPw) { el.demonBox.hidden = false; el.demonMsg.textContent = ''; el.demonIn.focus(); return; }
-    if (s.gold && !owned.has(s.gold)) { openBuy(i); return; }
     selectSkin(i);
   });
-  (s.gold || s.lock ? goldEl : skinsEl).appendChild(b);
+  (s.lock ? powEl : skinsEl).appendChild(b);
 });
 demonLabel();
-function renderGold() {
-  el.goldVal.textContent = fmt(gold);
-  for (const [i, s] of SKINS.entries()) if (s.gold) $('#skin-' + i).classList.toggle('locked', !owned.has(s.gold));
-  if (buyIdx >= 0) openBuy(buyIdx);
-}
-function openBuy(i) {
-  const s = SKINS[i]; buyIdx = i; el.buyBox.hidden = false;
-  const falta = s.price - gold;
-  el.buyText.innerHTML = falta > 0
-    ? `<b>${s.name}</b> custa ${s.price} gold. Você tem ${fmt(gold)}, faltam ${fmt(falta)}.<span class="buy-rule">${GOLD_RULE}</span>`
-    : `Liberar <b>${s.name}</b> por ${s.price} gold? Você tem ${fmt(gold)}.`;
-  el.buyBtn.hidden = falta > 0;
-}
-function onGold(m) {
-  gold = Math.max(0, m.g | 0); owned = new Set(Array.isArray(m.o) ? m.o : []);
-  if (typeof m.w === 'string') { wallet = m.w; store.set('minhocaos.wallet', wallet); }
-  if (m.rank) lastPrize = { add: m.add | 0, rank: m.rank | 0, life: m.life | 0, min: m.min | 0 };
-  if (m.buy) {
-    const i = SKINS.findIndex(s => s.gold === m.buy);
-    if (m.ok && i >= 0) { buyIdx = -1; el.buyBox.hidden = true; selectSkin(i); toast(`Pele <b>${esc(SKINS[i].name)}</b> liberada`, '#ffd23f'); sfx('power'); }
-  }
-  if (SKINS[skinIdx].gold && !owned.has(SKINS[skinIdx].gold)) selectSkin(0);
-  renderGold();
-}
-el.buyBtn.addEventListener('click', () => {
-  if (buyIdx < 0) return;
-  if (conn !== 'online') { toast('Sem conexão com o servidor', '#b9a9b3'); return; }
-  send({ t: 'buy', k: SKINS[buyIdx].gold });
-});
-renderGold();
 function tryDemon() {
   const v = el.demonIn.value.trim();
   if (!v) { el.demonIn.focus(); return; }
@@ -2004,8 +1935,8 @@ function updateKeysHint() {
   const extra = demon
     ? (coarse ? 'os botões à esquerda soltam serra, laser, fogo azul, boost 3× e triplicar; o amarelo vira o turbo do demônio.'
               : '<kbd>Espaço</kbd> serra · <kbd>Shift</kbd> turbo · <kbd>1</kbd> laser · <kbd>3</kbd> fogo azul · <kbd>4</kbd> boost 3× · <kbd>5</kbd> triplicar')
-    : sel.gold === 'vt' ? (coarse ? 'o botão à esquerda solta o turbo 3×.' : '<kbd>Shift</kbd> solta o turbo 3× (recarga de 12 s)')
-    : sel.gold === 'da' ? 'a cada 1.000 pontos nascem 2 filhotes que te ajudam.' : '';
+    : sel.logo === 'vt' ? (coarse ? 'o botão à esquerda solta o turbo 3×.' : '<kbd>Shift</kbd> solta o turbo 3× (recarga de 12 s)')
+    : sel.logo === 'da' ? 'a cada 1.000 pontos nascem 2 filhotes que te ajudam.' : '';
   const name = demon ? 'Demônio' : sel.name;
   $('#keysHint').innerHTML = (coarse
     ? 'Toque e arraste para guiar. Segure o botão amarelo (ou um segundo dedo na tela) para acelerar.'
@@ -2024,10 +1955,9 @@ function renderModes() {
 }
 for (const m of ['normal', 'turbo']) $('#mode-' + m).addEventListener('click', () => setMode(m));
 /* aviso de novidades: aparece uma vez para cada pessoa (por versão) e depois não aparece mais */
-const NEWS_ID = '2026-10-05';
+const NEWS_ID = '2026-10-05b';
 const NEWS = [
-  ['turbo', '#f20051', 'Peles com poderes', 'As peles de bandeira saíram. Agora o gold libera VTURB (turbo 3× mais rápido no Shift) e Direct Ads (a cada 1.000 pontos nascem 2 filhotes que não te machucam).'],
-  ['dobro', '#ffd23f', 'Seu gold de volta', 'Quem tinha comprado peles de bandeira recebeu o gold de volta para gastar nas peles novas.'],
+  ['turbo', '#f20051', 'Peles com poderes, grátis', 'As peles de bandeira e o gold saíram. VTURB (turbo 3× mais rápido no Shift) e Direct Ads (a cada 1.000 pontos nascem 2 filhotes que não te machucam) estão liberadas para todo mundo.'],
   ['fogo', '#3aa8ff', 'Demônio ganhou poderes', '3 solta bolas de fogo azul, 4 dá um boost 3× mais rápido e 5 triplica o tamanho. O 1 continua sendo o laser.'],
   ['laser', '#ff3b1a', 'Recarga na tela', 'Depois de usar um poder, um contador mostra quanto falta para usar de novo.'],
   ['turbo', '#ffd23f', 'Modo Turbo e Inversão', 'No modo Turbo o Turbo não acaba e se soma. O poder Inversão deixa quem chega perto com os comandos invertidos.'],

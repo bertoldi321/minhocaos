@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 8;
+const PROTO = 9;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
@@ -35,10 +35,10 @@ const INV_R = 560, INV_LINGER = 2.5;        // Inversão: quem chega perto fica 
 const LASER_LEN = 950, LASER_W = 10;      // laser da pele Demônio (tecla 1)
 // poderes das peles, cada um com recarga (s). burst = segundos de arrancada; spd = velocidade da arrancada
 const ABIL = {
-  laser: { skin: 'a8100c1a0507', cd: 4 },
-  fogo:  { skin: 'a8100c1a0507', cd: 12 },                                  // 3: bolas de fogo azul
-  boost: { skin: 'a8100c1a0507', cd: 10, burst: 3, spd: 410 * 3 },           // 4: acelerar 3× mais rápido
-  grow:  { skin: 'a8100c1a0507', cd: 45 },                                  // 5: triplica de tamanho
+  laser: { skin: 'a8100c1a0507', cd: 2 },
+  fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
+  boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
+  grow:  { skin: 'a8100c1a0507', cd: 1 },                                   // 5: triplica de tamanho (até MAX_MASS)
   vturb: { skin: 'ee492cf0234af20051', cd: 12, burst: 4, spd: 480 * 3 },     // VTURB: turbo 3× o do mapa
 };
 const MAX_MASS = 30000, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
@@ -80,30 +80,7 @@ function cleanSkin(s) { return typeof s === 'string' && /^([0-9a-f]{6}){1,3}$/i.
 // pele Demônio: só para quem mandou a senha certa (guardamos apenas o hash)
 const DEMON_SK = 'a8100c1a0507', DEMON_HASH = 'e8e1d4fdc13d856b51630e48c4440720b7709683768ba3eab8bf7f75cd6eb2ce', PW_TRIES = 8;
 const isDemonPw = s => typeof s === 'string' && s.length <= 40 && crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex') === DEMON_HASH;
-/* gold: ganho ao morrer bem colocado, gasto nas peles de bandeira.
-   A carteira fica no aparelho do jogador, mas assinada pelo servidor: editar o valor invalida a assinatura. */
-const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';
-const GOLD_SKINS = {                       // chave: [pele, preço] — peles com poderes
-  vt: [VTURB_SK, 200],                     // VTURB: turbo 3× mais rápido que o do mapa (Shift)
-  da: [DIRECT_SK, 300],                    // Direct Ads: a cada 1.000 pontos nascem 2 filhotes iguais a você
-};
-const LEGACY_SKINS = { br: 100, mx: 150, fr: 150, de: 150, us: 200, rs: 300 };   // peles de bandeira antigas: o gold volta para quem comprou
-const GOLD_BY_SKIN = new Map(Object.entries(GOLD_SKINS).map(([k, v]) => [v[0], k]));
-const GOLD_PRIZE = [0, 30, 20, 10, 5, 5];  // por colocação na hora em que a partida acaba
-const GOLD_MIN_LIFE = 60;                  // segundos vivo para a partida valer gold
-const GOLD_KEY_SRC = process.env.GOLD_SECRET ? 'GOLD_SECRET' : process.env.RENDER_SERVICE_ID ? 'RENDER_SERVICE_ID' : 'fixa';
-const GOLD_SECRET = process.env.GOLD_SECRET || process.env.RENDER_SERVICE_ID || 'minhocaos-gold-local';
-const walletSig = (g, o) => crypto.createHmac('sha256', GOLD_SECRET).update('v1.' + g + '.' + o).digest('base64url').slice(0, 22);
-function readWallet(s) {
-  if (typeof s !== 'string' || s.length > 120) return null;
-  const m = /^(\d{1,7})\.([a-z,]{0,40})\.([A-Za-z0-9_-]{22})$/.exec(s);
-  if (!m) return null;
-  const g = +m[1], o = m[2];
-  if (!crypto.timingSafeEqual(Buffer.from(walletSig(g, o)), Buffer.from(m[3]))) return null;
-  let gold = g; const owned = new Set();
-  for (const k of o ? o.split(',') : []) { if (GOLD_SKINS[k]) owned.add(k); else if (LEGACY_SKINS[k]) gold += LEGACY_SKINS[k]; }
-  return { gold: Math.min(9999999, gold), owned };
-}
+const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';   // peles com poderes (grátis)
 function cleanRoom(r) { return r === 'turbo' ? 'turbo' : 'geral'; }   // duas tocas: normal e modo Turbo   // uma toca só para todo mundo
 const num = v => typeof v === 'number' && isFinite(v);
 
@@ -555,16 +532,7 @@ class Room {
     this.bodyDrops(w, w.pts, n, Math.max(1, m * .7 / n));
     if (by && by.alive !== undefined && by !== w) by.kills++;
     this.events.push(['k', w.id, by ? by.id : 0, cause]);
-    if (w.client && w.client.open && cause !== 'left') this.prize(w, w.client);
     if (!w.pup) for (const o of this.worms.values()) if (o.pup && o.fam === w.id && o.alive) this.kill(o, null, 'orphan');
-  }
-  prize(w, c) {
-    // colocação na hora em que a partida acabou (contando o bot)
-    let rank = 1;
-    for (const o of this.worms.values()) if (o !== w && o.alive && !o.pup && o.mass > w.mass) rank++;
-    const life = this.time - (w.born || 0), add = life >= GOLD_MIN_LIFE ? (GOLD_PRIZE[rank] || 0) : 0;
-    if (add) c.gold = Math.min(9999999, c.gold + add);
-    c.sendGold({ add, rank, life: Math.floor(life), min: GOLD_MIN_LIFE });
   }
   cut(o, i, by, cause) {
     const pts = o.pts; if (i - 1 >= pts.length) return;
@@ -652,7 +620,6 @@ class Client {
     this.id = nextClient++; this.sock = sock; this.buf = Buffer.alloc(0); this.frag = null; this.fragOp = 0; this.fragLen = 0;
     this.open = true; this.lastSeen = Date.now(); this.room = null; this.worm = null;
     this.name = 'Visitante'; this.skin = 'ff7a2fffb347'; this.demon = false; this.pwTries = 0;
-    this.gold = 0; this.owned = new Set(); this.walletOk = true;
     this.rateT = Date.now(); this.rateN = 0;
     clients.add(this);
   }
@@ -724,15 +691,8 @@ class Client {
   look(m) {
     this.name = cleanName(m.n);
     if (m.s !== undefined) this.tryPw(m.s);
-    const k = cleanSkin(m.k), gk = GOLD_BY_SKIN.get(k);
-    this.skin = (k === DEMON_SK && !this.demon) || (gk && !this.owned.has(gk)) ? 'ff7a2fffb347' : k;
-  }
-  sendGold(extra) {
-    const o = [...this.owned].sort().join(',');
-    const msg = Object.assign({ t: 'gold', g: this.gold, o: o ? o.split(',') : [] }, extra);
-    // carteira inválida (de outro servidor, ou mexida): não sobrescreve até o jogador ganhar ou gastar algo
-    if (this.walletOk || (extra && (extra.add || (extra.buy && extra.ok)))) { msg.w = this.gold + '.' + o + '.' + walletSig(this.gold, o); this.walletOk = true; }
-    this.send(msg);
+    const k = cleanSkin(m.k);
+    this.skin = k === DEMON_SK && !this.demon ? 'ff7a2fffb347' : k;
   }
   handle(text) {
     if (!this.open) return;
@@ -742,13 +702,11 @@ class Client {
       case 'hi': {
         if (this.room) return;
         if (m.v !== PROTO) { this.send({ t: 'old' }); return; }
-        if (m.w) { const wl = readWallet(m.w); if (wl) { this.gold = wl.gold; this.owned = wl.owned; } else this.walletOk = false; }
         this.look(m);
         const r = getRoom(cleanRoom(m.r));
         if (!r) { this.send({ t: 'full' }); return; }
         if (r.clients.size >= MAX_PLAYERS) { this.send({ t: 'full' }); return; }
         r.join(this);
-        this.sendGold();
         break;
       }
       case 'name':
@@ -758,14 +716,6 @@ class Client {
       case 'senha':
         this.send({ t: 'senha', ok: this.tryPw(m.s) });
         break;
-      case 'buy': {
-        const s = GOLD_SKINS[m.k];
-        if (typeof m.k !== 'string' || !s) return;
-        let ok = this.owned.has(m.k);
-        if (!ok && this.gold >= s[1]) { this.gold -= s[1]; this.owned.add(m.k); ok = true; }
-        this.sendGold({ buy: m.k, ok });
-        break;
-      }
       case 'play':
         if (!this.room || (this.worm && this.worm.alive)) return;
         this.look(m);
@@ -788,7 +738,6 @@ class Client {
         if (DEV && this.worm && num(m.x) && num(m.y)) { this.worm.x = m.x; this.worm.y = m.y; this.worm.pts.length = 0; }
         if (DEV && this.worm && num(m.a)) { this.worm.angle = this.worm.target = m.a; }
         if (DEV && this.worm && num(m.mass)) this.worm.mass = clamp(m.mass, 14, 5000);
-        if (DEV && num(m.gold)) { this.gold = clamp(m.gold | 0, 0, 9999999); this.sendGold({ add: 1 }); }
         if (DEV && num(m.born) && this.worm) this.worm.born = this.room.time - m.born;
         break;
     }
@@ -804,7 +753,7 @@ const server = http.createServer((req, res) => {
   if (url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok'); return; }
   if (url === '/stats') {
     const r = []; for (const x of rooms.values()) r.push({ sala: x.name, conectados: x.clients.size, minhocas: x.worms.size, bolinhasSoltas: x.drops.size });
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ regiao: process.env.FLY_REGION || 'local', maquina: process.env.FLY_MACHINE_ID || '-', chaveGold: GOLD_KEY_SRC, salas: r }, null, 1)); return;
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ regiao: process.env.FLY_REGION || 'local', maquina: process.env.FLY_MACHINE_ID || '-', salas: r }, null, 1)); return;
   }
   if (url === '/' || url === '/index.html') {
     if (DEV) loadIndex();
