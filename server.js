@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 7;
+const PROTO = 8;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
@@ -32,8 +32,17 @@ const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
 const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6, inverte: 6 };
 const INV_R = 560, INV_LINGER = 2.5;        // Inversão: quem chega perto fica com os comandos invertidos (e mais 2,5 s depois de sair)
-const LASER_LEN = 950, LASER_W = 10, LASER_CD = 4;   // laser da pele Demônio (tecla 1)
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384;
+const LASER_LEN = 950, LASER_W = 10;      // laser da pele Demônio (tecla 1)
+// poderes das peles, cada um com recarga (s). burst = segundos de arrancada; spd = velocidade da arrancada
+const ABIL = {
+  laser: { skin: 'a8100c1a0507', cd: 4 },
+  fogo:  { skin: 'a8100c1a0507', cd: 12 },                                  // 3: bolas de fogo azul
+  boost: { skin: 'a8100c1a0507', cd: 10, burst: 3, spd: 410 * 3 },           // 4: acelerar 3× mais rápido
+  grow:  { skin: 'a8100c1a0507', cd: 45 },                                  // 5: triplica de tamanho
+  vturb: { skin: 'ee492cf0234af20051', cd: 12, burst: 4, spd: 480 * 3 },     // VTURB: turbo 3× o do mapa
+};
+const MAX_MASS = 30000, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 5], ['cresce', 5], ['inverte', 4], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
@@ -73,14 +82,12 @@ const DEMON_SK = 'a8100c1a0507', DEMON_HASH = 'e8e1d4fdc13d856b51630e48c4440720b
 const isDemonPw = s => typeof s === 'string' && s.length <= 40 && crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex') === DEMON_HASH;
 /* gold: ganho ao morrer bem colocado, gasto nas peles de bandeira.
    A carteira fica no aparelho do jogador, mas assinada pelo servidor: editar o valor invalida a assinatura. */
-const GOLD_SKINS = {                       // chave: [pele, preço]
-  br: ['009c3bffdf00002776', 100],
-  mx: ['006847f4f1eace1126', 150],
-  fr: ['0055a4f4f1eaef4135', 150],
-  de: ['1f1a1add0000ffce00', 150],
-  us: ['3c3b6ef4f1eab22234', 200],
-  rs: ['d9101cf4f1eaf2c14e', 300],
+const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';
+const GOLD_SKINS = {                       // chave: [pele, preço] — peles com poderes
+  vt: [VTURB_SK, 200],                     // VTURB: turbo 3× mais rápido que o do mapa (Shift)
+  da: [DIRECT_SK, 300],                    // Direct Ads: a cada 1.000 pontos nascem 2 filhotes iguais a você
 };
+const LEGACY_SKINS = { br: 100, mx: 150, fr: 150, de: 150, us: 200, rs: 300 };   // peles de bandeira antigas: o gold volta para quem comprou
 const GOLD_BY_SKIN = new Map(Object.entries(GOLD_SKINS).map(([k, v]) => [v[0], k]));
 const GOLD_PRIZE = [0, 30, 20, 10, 5, 5];  // por colocação na hora em que a partida acaba
 const GOLD_MIN_LIFE = 60;                  // segundos vivo para a partida valer gold
@@ -93,7 +100,9 @@ function readWallet(s) {
   if (!m) return null;
   const g = +m[1], o = m[2];
   if (!crypto.timingSafeEqual(Buffer.from(walletSig(g, o)), Buffer.from(m[3]))) return null;
-  return { gold: g, owned: new Set(o ? o.split(',').filter(k => GOLD_SKINS[k]) : []) };
+  let gold = g; const owned = new Set();
+  for (const k of o ? o.split(',') : []) { if (GOLD_SKINS[k]) owned.add(k); else if (LEGACY_SKINS[k]) gold += LEGACY_SKINS[k]; }
+  return { gold: Math.min(9999999, gold), owned };
 }
 function cleanRoom(r) { return r === 'turbo' ? 'turbo' : 'geral'; }   // duas tocas: normal e modo Turbo   // uma toca só para todo mundo
 const num = v => typeof v === 'number' && isFinite(v);
@@ -121,7 +130,7 @@ function encodePoly(w) {
 }
 function flagsOf(w) {
   let f = 0; for (const k in w.powers) if (PBIT[k]) f |= PBIT[k];
-  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; return f;
+  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; if (w.burstT > 0) f |= F_BURST; return f;
 }
 
 /* ================= sala ================= */
@@ -168,7 +177,7 @@ class Room {
     const ob = []; for (let i = 0; i < ORB_N; i++) if (this.orbs[i].born > this.time) ob.push([i, +(this.orbs[i].born - this.time).toFixed(2)]);
     const worms = []; for (const w of this.worms.values()) worms.push([w.id, w.name, w.skin, encodePoly(w)]);
     const drops = []; for (const d of this.drops.values()) drops.push([d.id, Math.round(d.x), Math.round(d.y), d.v, d.col]);
-    const fires = []; for (const f of this.fires.values()) fires.push([f.id, Math.round(f.x0), Math.round(f.y0), Math.round(f.x1), Math.round(f.y1), f.owner, +f.age.toFixed(2)]);
+    const fires = []; for (const f of this.fires.values()) fires.push([f.id, Math.round(f.x0), Math.round(f.y0), Math.round(f.x1), Math.round(f.y1), f.owner, +f.age.toFixed(2), f.blue]);
     c.send({ t: 'w', v: PROTO, room: this.name, mode: this.mode, seed: this.seed, me: c.id, k: this.tick, tickMs: TICK_MS, gens: gs, og, ob, worms, drops, fires });
   }
   sendBodies(c) {
@@ -199,6 +208,7 @@ class Room {
     const cols = c.skin.match(/.{6}/g).map(h => h);
     const w = { id: this.nextWorm++, name: c.name, skin: c.skin, cols, x: p.x, y: p.y, angle: ang, target: ang,
       wantBoost: false, boosting: false, mass: 30, pts: [], powers: {}, frozen: 0, drop: 0, kills: 0, alive: true, client: c, born: this.time };
+    w.fam = w.id;
     const sp = radiusOf(w.mass) * .55, n = segCount(w.mass);
     for (let i = 1; i <= n; i++) w.pts.push({ x: w.x - Math.cos(ang) * sp * i, y: w.y - Math.sin(ang) * sp * i });
     this.worms.set(w.id, w); c.worm = w;
@@ -233,15 +243,16 @@ class Room {
     if (type === 'ima') { w.powers.ima = (w.powers.ima || 0) + POWER_DUR.ima; return; }   // Ímã soma o tempo
     if (POWER_DUR[type]) w.powers[type] = POWER_DUR[type];
   }
-  spawnFire(w) {
+  spawnFire(w, blue) {
     const base = Math.random() * TAU, lim = WORLD_R - 70;
-    for (let k = 0; k < FB_N && this.fires.size < MAX_FB; k++) {
-      const a = base + k * TAU / FB_N + (Math.random() - .5) * .5, d = FB_MIN + Math.random() * (FB_MAX - FB_MIN);
+    const N = blue ? 8 : FB_N;
+    for (let k = 0; k < N && this.fires.size < MAX_FB; k++) {
+      const a = base + k * TAU / N + (Math.random() - .5) * .5, d = FB_MIN + Math.random() * (FB_MAX - FB_MIN);
       let x1 = w.x + Math.cos(a) * d, y1 = w.y + Math.sin(a) * d;
       const r2 = x1 * x1 + y1 * y1; if (r2 > lim * lim) { const q = lim / Math.sqrt(r2); x1 *= q; y1 *= q; }
-      const f = { id: this.nextFire++, x0: Math.round(w.x), y0: Math.round(w.y), x1: Math.round(x1), y1: Math.round(y1), owner: w.id, age: 0, x: w.x, y: w.y };
+      const f = { id: this.nextFire++, x0: Math.round(w.x), y0: Math.round(w.y), x1: Math.round(x1), y1: Math.round(y1), owner: w.id, fam: w.fam, blue: blue ? 1 : 0, age: 0, x: w.x, y: w.y };
       this.fires.set(f.id, f);
-      this.events.push(['F', f.id, f.x0, f.y0, f.x1, f.y1, f.owner]);
+      this.events.push(['F', f.id, f.x0, f.y0, f.x1, f.y1, f.owner, f.blue]);
     }
   }
 
@@ -253,7 +264,7 @@ class Room {
     for (const w of list) {
       if (!w.powers.inverte) continue;
       for (const o of list) {
-        if (o === w) continue;
+        if (o === w || o.fam === w.fam) continue;
         const dx = o.x - w.x, dy = o.y - w.y;
         if (dx * dx + dy * dy < INV_R * INV_R) o.inverted = Math.max(o.inverted || 0, INV_LINGER);
       }
@@ -261,7 +272,7 @@ class Room {
     for (const w of list) {
       if (!w.powers.gelo) continue;
       for (const o of list) {
-        if (o === w) continue;
+        if (o === w || o.fam === w.fam) continue;
         const dx = o.x - w.x, dy = o.y - w.y;
         if (dx * dx + dy * dy < GELO_R * GELO_R) o.frozen = Math.max(o.frozen, .35);
       }
@@ -283,6 +294,14 @@ class Room {
       if (w.client && w.client.worm === w) { w.client.worm = null; changed = true; }
     }
     if (changed) this.sendRoster();
+    for (const w of list) {
+      if (!w.alive) continue;
+      if (w.pup) this.botThink(w, list);
+      else if (w.skin === DIRECT_SK && w.client) {
+        const k = Math.floor(w.mass / PUP_EVERY);
+        if (k > (w.pupK || 0)) { w.pupK = k; this.spawnPups(w, 2); }
+      }
+    }
     if (this.bot && this.bot.alive) this.botThink(this.bot, list);
     else if (this.clients.size && (this.botT -= dt) <= 0) this.spawnBot();
     if (this.tick % SEND_EVERY === 0) this.broadcast();
@@ -295,8 +314,26 @@ class Room {
       wantBoost: false, boosting: false, mass: 60, pts: [], powers: {}, frozen: 0, drop: 0, kills: 0, alive: true, client: null, bot: true, think: 0, wander: ang };
     const sp = radiusOf(w.mass) * .55, n = segCount(w.mass);
     for (let i = 1; i <= n; i++) w.pts.push({ x: w.x - Math.cos(ang) * sp * i, y: w.y - Math.sin(ang) * sp * i });
+    w.fam = w.id;
     this.worms.set(w.id, w); this.bot = w; this.botT = BOT_RESPAWN;
     this.events.push(['n', w.id, w.name, w.skin]);
+  }
+  // filhotes da pele Direct Ads: iguais ao dono, não machucam nem são machucados por ele
+  spawnPups(par, n) {
+    let alive = 0; for (const o of this.worms.values()) if (o.pup && o.fam === par.id && o.alive) alive++;
+    let made = 0;
+    for (let k = 0; k < n && alive < PUP_MAX; k++, alive++, made++) {
+      const t = par.pts[Math.min(par.pts.length - 1, 8 + k * 6)] || par, side = k % 2 ? 1 : -1;
+      const ang = par.angle + side * .7, x = t.x + Math.cos(par.angle + side * Math.PI / 2) * 60, y = t.y + Math.sin(par.angle + side * Math.PI / 2) * 60;
+      const w = { id: this.nextWorm++, name: cleanName(par.name.slice(0, 11) + ' Jr'), skin: par.skin, cols: par.cols, x, y, angle: ang, target: ang,
+        wantBoost: false, boosting: false, mass: PUP_MASS, pts: [], powers: {}, frozen: 0, drop: 0, kills: 0, alive: true, client: null, bot: true, pup: true,
+        fam: par.id, think: 0, wander: ang };
+      const sp = radiusOf(w.mass) * .55, ns = segCount(w.mass);
+      for (let i = 1; i <= ns; i++) w.pts.push({ x: w.x - Math.cos(ang) * sp * i, y: w.y - Math.sin(ang) * sp * i });
+      this.worms.set(w.id, w);
+      this.events.push(['n', w.id, w.name, w.skin]);
+    }
+    if (made && par.client) par.client.send({ t: 'pups', n: made });
   }
   // decide para onde o bot vai (roda depois das colisões, com a grade do passo atual)
   botThink(w, list) {
@@ -304,7 +341,9 @@ class Room {
     w.think = 4;
     const r = radiusOf(w.mass);
     let desired = w.wander;
+    const par = w.pup ? this.worms.get(w.fam) : null;
     if (w.x * w.x + w.y * w.y > (WORLD_R * .8) ** 2) desired = Math.atan2(-w.y, -w.x);
+    else if (par && par.alive && (par.x - w.x) ** 2 + (par.y - w.y) ** 2 > 520 * 520) desired = Math.atan2(par.y - w.y, par.x - w.x);   // filhote volta para perto do dono
     else {
       let best = null, bs = 0;
       for (const o of this.orbs) {
@@ -362,7 +401,8 @@ class Room {
     for (const k in P) { P[k] -= dt; if (P[k] <= 0) delete P[k]; }
     if (w.frozen > 0) w.frozen -= dt;
     if (w.inverted > 0) w.inverted -= dt;
-    if (w.laserCd > 0) w.laserCd -= dt;
+    if (w.cds) for (const k in w.cds) { w.cds[k] -= dt; if (w.cds[k] <= 0) delete w.cds[k]; }
+    if (w.burstT > 0) w.burstT -= dt;
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
     // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
@@ -371,6 +411,7 @@ class Room {
     w.superOn = demon && !!w.wantSuper && w.mass > MIN_BOOST && !fz && !turbo;
     w.boosting = turbo || w.superOn || (w.wantBoost && w.mass > MIN_BOOST && !fz);
     let spd = turbo ? TURBO_SPEED : w.superOn ? DEMON_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
+    if (w.burstT > 0) { spd = Math.max(spd, w.burstSpd); w.boosting = true; }   // arrancada de poder: não gasta tamanho
     w.mult = w.stack ? Math.min(MAX_STACK, w.stack) : 1;
     spd *= w.mult;
     if (fz) spd *= SLOW;
@@ -392,8 +433,9 @@ class Room {
     }
     const n = segCount(w.mass);
     if (w.pts.length > n) w.pts.length = n;
-    if ((w.boosting && !turbo) || w.sawOn) {
-      const loss = (4 + w.mass * .012) * dt * ((w.boosting && !turbo ? 1 : 0) + (w.sawOn ? .8 : 0));
+    const paid = w.boosting && !turbo && !(w.burstT > 0);
+    if (paid || w.sawOn) {
+      const loss = (4 + w.mass * .012) * dt * ((paid ? 1 : 0) + (w.sawOn ? .8 : 0));
       w.mass -= loss; w.drop += loss;
       if (w.drop >= 3) {
         const t = w.pts[w.pts.length - 1] || w;
@@ -465,7 +507,7 @@ class Room {
       const saw = !!w.powers.serra || !!w.sawOn, hr = r * .82, R = hr + this.maxR;
       let burnt = null;
       for (const f of this.fires.values()) {
-        if (f.owner === w.id) continue;                          // quem soltou o fogo não se queima
+        if (f.fam === w.fam) continue;                           // quem soltou o fogo (e os filhotes dele) não se queima
         const rr = hr + FB_R, dx = f.x - w.x, dy = f.y - w.y;
         if (dx * dx + dy * dy < rr * rr) { burnt = f; break; }
       }
@@ -476,7 +518,7 @@ class Room {
         const c = this.grid[cy * GN + cx];
         for (let j = 0; j < c.length; j++) {
           const code = c[j], o = list[Math.floor(code / 1024)];
-          if (!o || o === w || !o.alive) continue;
+          if (!o || o === w || !o.alive || o.fam === w.fam) continue;
           const i = code % 1024; let sx, sy;
           if (i === 0) { sx = o.x; sy = o.y; } else { const p = o.pts[i - 1]; if (!p) continue; sx = p.x; sy = p.y; }
           const rr = hr + radiusOf(o.mass) * .82, dx = sx - w.x, dy = sy - w.y;
@@ -514,11 +556,12 @@ class Room {
     if (by && by.alive !== undefined && by !== w) by.kills++;
     this.events.push(['k', w.id, by ? by.id : 0, cause]);
     if (w.client && w.client.open && cause !== 'left') this.prize(w, w.client);
+    if (!w.pup) for (const o of this.worms.values()) if (o.pup && o.fam === w.id && o.alive) this.kill(o, null, 'orphan');
   }
   prize(w, c) {
     // colocação na hora em que a partida acabou (contando o bot)
     let rank = 1;
-    for (const o of this.worms.values()) if (o !== w && o.alive && o.mass > w.mass) rank++;
+    for (const o of this.worms.values()) if (o !== w && o.alive && !o.pup && o.mass > w.mass) rank++;
     const life = this.time - (w.born || 0), add = life >= GOLD_MIN_LIFE ? (GOLD_PRIZE[rank] || 0) : 0;
     if (add) c.gold = Math.min(9999999, c.gold + add);
     c.sendGold({ add, rank, life: Math.floor(life), min: GOLD_MIN_LIFE });
@@ -535,9 +578,20 @@ class Room {
     if (o.mass < 14) this.kill(o, by, cause || 'saw');
   }
   // laser da pele Demônio: um raio reto da cabeça para a frente; atravessa tudo até a borda
+  // poderes por tecla: valida pele e recarga; devolve true se usou
+  useAbility(w, k) {
+    const A = ABIL[k];
+    if (!A || !w.alive || w.skin !== A.skin) return false;
+    w.cds = w.cds || {};
+    if (w.cds[k] > 0) return false;
+    if (k === 'laser') this.fireLaser(w);
+    else if (k === 'fogo') this.spawnFire(w, true);
+    else if (k === 'grow') w.mass = Math.min(MAX_MASS, w.mass * 3);
+    else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
+    w.cds[k] = A.cd;
+    return true;
+  }
   fireLaser(w) {
-    if (!w.alive || w.skin !== DEMON_SK || (w.laserCd || 0) > 0) return;
-    w.laserCd = LASER_CD;
     const c = Math.cos(w.angle), s = Math.sin(w.angle), r = radiusOf(w.mass);
     const x0 = w.x + c * r, y0 = w.y + s * r;
     let len = LASER_LEN;
@@ -545,7 +599,7 @@ class Room {
     if (disc > 0) len = Math.max(0, Math.min(len, -b + Math.sqrt(disc)));
     const hits = [];
     for (const o of this.worms.values()) {
-      if (o === w || !o.alive) continue;
+      if (o === w || !o.alive || o.fam === w.fam) continue;
       const ro = radiusOf(o.mass) * .9 + LASER_W, ro2 = ro * ro;
       const near = (px, py) => { const t = clamp((px - x0) * c + (py - y0) * s, 0, len), dx = x0 + c * t - px, dy = y0 + s * t - py; return dx * dx + dy * dy < ro2; };
       if (near(o.x, o.y)) { hits.push([o, 0]); continue; }
@@ -558,7 +612,8 @@ class Room {
     const w = [];
     for (const x of this.worms.values()) {
       const e = [x.id, Math.round(x.x), Math.round(x.y), Math.round(x.angle * 100), Math.round(x.mass), flagsOf(x), x.kills];
-      if (x.mult > 1) e.push(Math.round(x.mult * 100));
+      if (x.mult > 1 || x.burstT > 0) e.push(Math.round(x.mult * 100));
+      if (x.burstT > 0) e.push(Math.round(x.lastSpd));
       w.push(e);
     }
     const msg = JSON.stringify({ t: 's', k: this.tick, w, e: this.events });
@@ -719,8 +774,8 @@ class Client {
       case 'in':
         if (this.worm && this.worm.alive && num(m.a) && Math.abs(m.a) < 2000) { this.worm.target = m.a / 100; this.worm.wantBoost = !!m.b; this.worm.wantSuper = m.b === 2; this.worm.wantSaw = !!m.s; }
         break;
-      case 'laser':
-        if (this.worm && this.room) this.room.fireLaser(this.worm);
+      case 'ab':
+        if (this.worm && this.room && typeof m.k === 'string' && this.room.useAbility(this.worm, m.k)) this.send({ t: 'cd', k: m.k, s: ABIL[m.k].cd });
         break;
       case 'sync':
         if (this.room) this.room.sendBodies(this);
