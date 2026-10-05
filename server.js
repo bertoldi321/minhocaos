@@ -22,10 +22,9 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 11;
+const PROTO = 12;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
-const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
 const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
@@ -43,7 +42,6 @@ const ABIL = {
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
-const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 5], ['cresce', 5], ['inverte', 4], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
 /* bolas de fogo: saem da cabeça de quem pegou o poder, se espalham e ficam paradas queimando */
@@ -84,7 +82,7 @@ const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';   // peles co
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
 function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
-function cleanRoom(r) { return r === 'turbo' ? 'turbo' : 'geral'; }   // duas tocas: normal e modo Turbo   // uma toca só para todo mundo
+function cleanRoom(r) { return r === 'normal' ? 'normal' : 'geral'; }   // duas tocas: 'geral' (com poderes) e 'normal' (clássico, sem poderes)
 const num = v => typeof v === 'number' && isFinite(v);
 
 /* mesmas fórmulas do cliente: posição e valor de cada bolinha e de cada esfera saem da semente da sala */
@@ -117,7 +115,7 @@ function flagsOf(w) {
 class Room {
   constructor(name) {
     this.name = name;
-    this.mode = name === 'turbo' ? 'turbo' : 'normal'; this.weights = this.mode === 'turbo' ? TURBO_ORB_WEIGHTS : ORB_WEIGHTS;
+    this.mode = name === 'normal' ? 'classico' : 'poderes'; this.classic = this.mode === 'classico'; this.weights = ORB_WEIGHTS;
     this.seed = crypto.randomInt(1, 2 ** 31 - 1);
     this.time = 0; this.tick = 0;
     this.clients = new Set();
@@ -219,7 +217,6 @@ class Room {
   /* ---------- poderes ---------- */
   applyPower(w, type) {
     if (type === 'cresce') { w.mass *= GROW; return; }
-    if (type === 'turbo' && this.mode === 'turbo') { w.stack = (w.stack || 0) + 1; w.powers.turbo = Infinity; return; }
     if (type === 'fogo') this.spawnFire(w);
     if (type === 'veneno') w.poison = w.mass * POISON_LOSS / POWER_DUR.veneno;   // perde 20% aos poucos
     if (type === 'ima') { w.powers.ima = (w.powers.ima || 0) + POWER_DUR.ima; return; }   // Ímã soma o tempo
@@ -279,7 +276,7 @@ class Room {
     for (const w of list) {
       if (!w.alive) continue;
       if (w.pup) this.botThink(w, list);
-      else if (w.skin === DIRECT_SK && w.client) {
+      else if (w.skin === DIRECT_SK && w.client && !this.classic) {
         const k = Math.floor(w.mass / PUP_EVERY);
         if (k > (w.pupK || 0)) { w.pupK = k; this.spawnPups(w, 2); }
       }
@@ -328,7 +325,7 @@ class Room {
     else if (par && par.alive && (par.x - w.x) ** 2 + (par.y - w.y) ** 2 > 520 * 520) desired = Math.atan2(par.y - w.y, par.x - w.x);   // filhote volta para perto do dono
     else {
       let best = null, bs = 0;
-      for (const o of this.orbs) {
+      for (const o of this.classic ? [] : this.orbs) {
         if (this.time < o.born || BAD_ORB[o.type]) continue;
         const d = Math.hypot(o.x - w.x, o.y - w.y);
         if (d < 520 && 4 / (d + 60) > bs) { bs = 4 / (d + 60); best = o; }
@@ -388,17 +385,17 @@ class Room {
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
     // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
-    const demon = w.skin === DEMON_SK;
+    const demon = w.skin === DEMON_SK && !this.classic;   // no modo Normal as peles não têm poder
     w.sawOn = demon && !!w.wantSaw && w.mass > MIN_BOOST;
     w.superOn = demon && !!w.wantSuper && w.mass > MIN_BOOST && !fz && !turbo;
     w.boosting = turbo || w.superOn || (w.wantBoost && w.mass > MIN_BOOST && !fz);
     let spd = turbo ? TURBO_SPEED : w.superOn ? DEMON_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
-    if (w.skin === VTURB_SK) {
+    if (w.skin === VTURB_SK && !this.classic) {
       const vb = w.wantBoost && w.mass > MIN_BOOST && !fz;
       spd = vb ? BOOST_SPEED * 3 : turbo ? TURBO_SPEED : BASE_SPEED * 1.5;
     }
     if (w.burstT > 0) { spd = Math.max(spd, w.burstSpd); w.boosting = true; }   // arrancada de poder: não gasta tamanho
-    w.mult = w.stack ? Math.min(MAX_STACK, w.stack) : 1;
+    w.mult = 1;
     spd *= w.mult;
     if (fz) spd *= SLOW;
     w.lastSpd = spd;
@@ -468,6 +465,7 @@ class Room {
     }
   }
   pickOrbs(list) {
+    if (this.classic) return;                       // modo Normal: sem esferas de poder
     for (let i = 0; i < ORB_N; i++) {
       const o = this.orbs[i]; if (this.time < o.born) continue;
       for (const w of list) {
@@ -558,6 +556,7 @@ class Room {
   // poderes por tecla: valida pele e recarga; devolve true se usou
   useAbility(w, k) {
     const A = ABIL[k];
+    if (this.classic) return false;
     if (!A || !w.alive || w.skin !== A.skin) return false;
     w.cds = w.cds || {};
     if (w.cds[k] > .08) return false;   // pequena folga para atraso de rede
@@ -589,7 +588,7 @@ class Room {
     const w = [];
     for (const x of this.worms.values()) {
       const e = [x.id, Math.round(x.x), Math.round(x.y), Math.round(x.angle * 100), Math.round(x.mass), flagsOf(x), x.kills];
-      const exact = x.burstT > 0 || x.skin === VTURB_SK;   // velocidade que o cliente não consegue deduzir sozinho
+      const exact = x.burstT > 0 || (x.skin === VTURB_SK && !this.classic);   // velocidade que o cliente não consegue deduzir sozinho
       if (x.mult > 1 || exact) e.push(Math.round(x.mult * 100));
       if (exact) e.push(Math.round(x.lastSpd));
       w.push(e);

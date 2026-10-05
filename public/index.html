@@ -82,6 +82,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-o
 .play:active{transform:translateY(3px);box-shadow:0 2px 0 var(--clay-deep)}
 .keys{margin:4px 0 0;font-size:13px;color:var(--ink-dim);line-height:1.9}
 .dm-hint{color:#ff7a5c;font-weight:600}
+.lbl-note{font-weight:500;letter-spacing:.02em;text-transform:none;opacity:.8}
 kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:rgba(255,255,255,.05);font:600 12px/1.6 var(--ui);color:var(--ink)}
 .best{margin:0;font-size:14px;color:var(--ink-dim)}
 .best b{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -223,8 +224,8 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .mode small{font-size:12.5px;line-height:1.35}
 .mcount{font-size:11.5px;font-weight:600;color:var(--ink-dim);opacity:.8}
 .mode[aria-checked="true"]{border-color:var(--clay);background:rgba(255,138,61,.13);color:var(--ink)}
-.mode.turbo b{color:#ffd23f}
-.mode.turbo[aria-checked="true"]{border-color:#ffd23f;background:rgba(255,210,63,.12)}
+.mode.classic b{color:#8dff9a}
+.mode.classic[aria-checked="true"]{border-color:#8dff9a;background:rgba(141,255,154,.1)}
 #toasts{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 18px);transform:translateX(-50%);width:min(380px,calc(100% - 32px));display:grid;gap:6px;justify-items:center;z-index:6;pointer-events:none}
 .toast{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:14px;font-weight:500;animation:tin .25s ease-out,tout .45s ease-in 2.2s forwards;max-width:100%}
 .toast::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c)}
@@ -318,12 +319,12 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
         <input id="name" maxlength="14" placeholder="Seu nome" spellcheck="false">
         <span class="lbl" id="modeLbl">Modo</span>
         <div class="modes" role="radiogroup" aria-labelledby="modeLbl">
-          <button type="button" class="mode" id="mode-normal" role="radio" aria-checked="true"><b>Normal</b><small>Poderes duram alguns segundos.</small><span class="mcount"></span></button>
-          <button type="button" class="mode turbo" id="mode-turbo" role="radio" aria-checked="false"><b>Turbo</b><small>O Turbo não acaba e se soma: 1×, 2×, 3×…</small><span class="mcount"></span></button>
+          <button type="button" class="mode" id="mode-poderes" role="radio" aria-checked="true"><b>Poderes</b><small>Esferas de poder no mapa e peles com poderes.</small><span class="mcount"></span></button>
+          <button type="button" class="mode classic" id="mode-normal" role="radio" aria-checked="false"><b>Normal</b><small>Sem poderes: só comer, crescer e cercar.</small><span class="mcount"></span></button>
         </div>
         <span class="lbl" id="skinLbl">Pele</span>
         <div class="skins" id="skins" role="radiogroup" aria-labelledby="skinLbl"></div>
-        <span class="lbl" id="powLbl">Peles com poderes</span>
+        <span class="lbl" id="powLbl">Peles com poderes <span class="lbl-note">· poderes só no modo Poderes</span></span>
         <div class="skins pow-grid" id="powSkins" role="radiogroup" aria-labelledby="powLbl"></div>
         <div class="demon-pw" id="demonPw" hidden>
           <input id="demonIn" type="password" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Senha da pele Demônio" aria-label="Senha da pele Demônio">
@@ -347,7 +348,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
     </div>
     <div class="powers panel">
       <h2>Poderes</h2>
-      <p class="note">Aparecem como esferas brilhantes espalhadas pela toca. Coma uma para ativar; pegar outra igual renova o tempo, e o Ímã soma o tempo. Ímã e Turbo aparecem toda hora; a Serra é raríssima. Cuidado com as armadilhas: Lerdeza, Cegueira e Veneno.</p>
+      <p class="note">No modo Poderes, aparecem como esferas brilhantes espalhadas pela toca. Coma uma para ativar; pegar outra igual renova o tempo, e o Ímã soma o tempo. Ímã e Turbo aparecem toda hora; a Serra é raríssima. Cuidado com as armadilhas: Lerdeza, Cegueira e Veneno.</p>
       <ul id="legend"></ul>
     </div>
   </div>
@@ -387,7 +388,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 11;
+const PROTO = 12;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -422,8 +423,7 @@ const ABIL_UI = {
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
-const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 5], ['cresce', 5], ['inverte', 4], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
-let orbWts = ORB_WEIGHTS;   // no modo Turbo as esferas de Turbo aparecem mais
+let orbWts = ORB_WEIGHTS, classic = false;   // classic: modo Normal, sem esferas nem poderes de pele
 function orbType(r) { let x = r * 100; for (const [k, w] of orbWts) { x -= w; if (x < 0) return k; } return 'ima'; }
 // velocidade de uma minhoca (igual à conta do servidor); sf = multiplicador acumulado do modo Turbo
 function spdOf(f, boost, sup, sf) { return (f & PBIT.turbo ? TURBO_SPEED : sup ? DEMON_SPEED : boost ? BOOST_SPEED : BASE_SPEED) * (sf || 1) * (f & (F_FROZEN | PBIT.lento) ? SLOW : 1); }
@@ -875,7 +875,7 @@ function placeWorm(w, rt) {
     else {
       const r = radiusOf(m), slow = f & (F_FROZEN | PBIT.lento), turbo = f & PBIT.turbo;
       const sup = w.demon && wantSuper && m > 20 && !slow && !turbo, boost = turbo || sup || (wantBoost && m > 20 && !slow);
-      const spd = w.sk === VTURB_SK
+      const spd = w.sk === VTURB_SK && !classic
         ? ((wantBoost && m > 20 && !slow) ? BOOST_SPEED * 3 : turbo ? TURBO_SPEED : BASE_SPEED * 1.5) * ((e[7] || 100) / 100) * (slow ? SLOW : 1)
         : e[8] || spdOf(f, boost, sup, (e[7] || 100) / 100);
       let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (slow) tr *= .5;
@@ -905,7 +905,7 @@ function placeWorm(w, rt) {
 /* ================= mensagens do servidor ================= */
 function onWelcome(m) {
   chatEl.log.innerHTML = ''; chatEl.empty.hidden = false;   // trocou de toca: o chat é outro
-  orbWts = m.mode === 'turbo' ? TURBO_ORB_WEIGHTS : ORB_WEIGHTS;
+  classic = m.mode === 'classico';
   seed = m.seed | 0 || 1; tickMs = m.tickMs || 25; meId = m.me;
   for (const w of [...worms.values()]) dropWorm(w);
   myWormId = 0; me = null; myPowers = {};
@@ -953,7 +953,6 @@ function applyEvent(e) {
         const P = POWERS[type];
         if (type === 'cresce') toast(`<b>Crescer</b> deixou sua minhoca 20% maior`, P.color);
         else if (type === 'ima') { const left = +e[5] || P.dur; myPowers.ima = left; toast(left > P.dur + .5 ? `<b>Ímã</b> +${P.dur} s · faltam ${Math.ceil(left)} s` : `<b>Ímã</b> por ${P.dur} segundos`, P.color); }
-        else if (type === 'turbo' && mode === 'turbo') { myStack++; toast(`<b>Turbo ×${myStack}</b>: não acaba mais`, P.color); }
         else {
           myPowers[type] = P.dur;
           toast(type === 'lento' ? `<b>Lerdeza</b> deixou você lento por ${P.dur} segundos`
@@ -1027,12 +1026,13 @@ function onMessage(m) {
 /* ================= conexão ================= */
 let ws = null, conn = 'connecting', retry = 0, pingT = 0;
 // duas tocas: normal e modo Turbo (cada Turbo soma velocidade até a minhoca morrer)
-const MODE_Q = /[?&]modo=(turbo|normal)\b/.exec(location.search);
-let mode = MODE_Q ? MODE_Q[1] : store.get('minhocaos.mode', 'normal') === 'turbo' ? 'turbo' : 'normal';
-let roomName = mode === 'turbo' ? 'turbo' : 'geral', roomN = {};
+const MODE_Q = /[?&]modo=(poderes|normal)\b/.exec(location.search);
+// duas tocas: 'poderes' (o jogo com tudo) e 'normal' (clássico, sem poderes)
+let mode = MODE_Q ? MODE_Q[1] : store.get('minhocaos.mode2', 'poderes') === 'normal' ? 'normal' : 'poderes';
+let roomName = mode === 'normal' ? 'normal' : 'geral', roomN = {};
 function setMode(m) {
   if (m === mode) return;
-  mode = m; roomName = m === 'turbo' ? 'turbo' : 'geral'; store.set('minhocaos.mode', m);
+  mode = m; roomName = m === 'normal' ? 'normal' : 'geral'; store.set('minhocaos.mode2', m);
   renderModes();
   const s = ws; ws = null; roster = [];
   if (s) { try { s.close(); } catch (e) {} }
@@ -1117,7 +1117,7 @@ sb.addEventListener('pointerdown', sOn);
 sb.addEventListener('pointerup', sOff); sb.addEventListener('pointercancel', sOff); sb.addEventListener('pointerleave', sOff);
 sb.addEventListener('contextmenu', e => e.preventDefault());
 // laser da pele Demônio: tecla 1 (no celular, o botão do laser)
-function myAbils() { return !me || !me.alive ? [] : me.demon ? ['laser', 'fogo', 'boost', 'grow'] : []; }
+function myAbils() { return !me || !me.alive || classic ? [] : me.demon ? ['laser', 'fogo', 'boost', 'grow'] : []; }
 // quem decide a recarga é o servidor: o aperto sempre vai; a tela só mostra quanto falta
 function useAb(k) { if (state === 'play' && myAbils().includes(k)) send({ t: 'ab', k }); }
 function cdLeft(k) { const t = cds[k]; return t ? Math.max(0, (t - performance.now()) / 1000) : 0; }
@@ -1164,7 +1164,7 @@ function control(now) {
   if (!me || !me.alive || !me.seen || state !== 'play') return;
   if (wantAngle === null) wantAngle = me.angle;   // nasce indo para o centro até você mexer
   const dbg = window.__mh;
-  const demon = !!me.demon;
+  const demon = !!me.demon && !classic;
   if (dbg && dbg.force != null) { wantAngle = dbg.force; wantBoost = !!dbg.forceBoost; wantSuper = demon && !!dbg.forceSuper; wantSaw = demon && !!dbg.forceSaw; }
   else {
     if (input.left !== input.right) { input.aim = false; wantAngle = me.angle + (input.right ? .9 : -.9); }
@@ -1622,7 +1622,7 @@ function render() {
     ctx.drawImage(foodSprite(f.icon, f.col), f.x - s, f.y - s, s * 2, s * 2);
   }
 
-  for (const o of orbs) {
+  if (!classic) for (const o of orbs) {
     if (!o || time < o.born || !inView(o.x, o.y, 70)) continue;
     const P = POWERS[o.type], col = P.color, sc = Math.min(1, (time - o.born) * 2.5), y = o.y + Math.sin(time * 2.2 + o.ph) * 4, R = 18 * sc;
     if (R < 1) continue;
@@ -1729,7 +1729,7 @@ function drawMinimap() {
   if (me && me.alive && me.powers.cego) return;   // cego também não vê o minimapa
   mctx.fillStyle = '#ff4a2a';
   for (const f of fires.values()) { mctx.beginPath(); mctx.arc(c + f.x * sc, c + f.y * sc, 1.6 * DPR, 0, TAU); mctx.fill(); }
-  for (const o of orbs) { if (!o || time < o.born) continue; mctx.fillStyle = POWERS[o.type].color; mctx.beginPath(); mctx.arc(c + o.x * sc, c + o.y * sc, 1.8 * DPR, 0, TAU); mctx.fill(); }
+  if (!classic) for (const o of orbs) { if (!o || time < o.born) continue; mctx.fillStyle = POWERS[o.type].color; mctx.beginPath(); mctx.arc(c + o.x * sc, c + o.y * sc, 1.8 * DPR, 0, TAU); mctx.fill(); }
   for (const w of worms.values()) {
     if (!w.alive || !w.seen || w === me) continue;
     const x = c + w.x * sc, y = c + w.y * sc;
@@ -1773,18 +1773,17 @@ function setChip(key, rem, dur, col, label, iconKey) {
       el.chips.appendChild(c); chipEls[key] = c; c._sec = c.querySelector('.sec');
     }
     c.style.setProperty('--p', clamp(rem / dur, 0, 1).toFixed(3));
-    const s = key === 'frio' ? 'lento' : key === 'inv' ? 'invertido' : key === 'vel' ? '×' + Math.round(me ? me.mult : 1) : Math.ceil(rem) + 's';
+    const s = key === 'frio' ? 'lento' : key === 'inv' ? 'invertido' : Math.ceil(rem) + 's';
     if (c._sec.textContent !== s) c._sec.textContent = s;
   } else if (c) { c.remove(); delete chipEls[key]; }
 }
 function updateChips() {
   const alive = me && me.alive;
-  for (const k of PKEYS) if (POWERS[k].dur && !(k === 'turbo' && mode === 'turbo')) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
+  for (const k of PKEYS) if (POWERS[k].dur) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
   setChip('frio', alive && me.frozen > 0 && !myPowers.gelo ? 1 : 0, 1, '#7fe7ff', 'Congelado por outra minhoca', 'gelo');
   setChip('inv', alive && me.inv ? 1 : 0, 1, POWERS.inverte.color, 'Comandos invertidos', 'inverte');
   for (const k in ABIL_UI) setChip('ab_' + k, alive ? cdLeft(k) : 0, ABIL_UI[k].cd, ABIL_UI[k].col, ABIL_UI[k].name + ' recarregando', ABIL_UI[k].icon);
-  setChip('vel', alive && mode === 'turbo' && (me.flags & PBIT.turbo) ? 1 : 0, 1, '#ffd23f', 'Turbos acumulados', 'turbo');
-  sb.hidden = !(alive && me.demon && state === 'play');
+  sb.hidden = !(alive && me.demon && !classic && state === 'play');
   renderAbBar();
 }
 function othersOnline() { return roster.filter(p => p[0] !== meId); }
@@ -1833,7 +1832,7 @@ function renderLobby(force) {
     text = `Online · ${others.length} ${others.length === 1 ? 'amigo' : 'amigos'} na toca`;
     chips = others.map(p => `<li style="--c:#${/^[0-9a-f]{6}$/i.test(p[2]) ? p[2] : 'ff8a3d'}"><i></i><span>${esc(cleanName(p[1]))}</span><small>${p[3] ? 'jogando' : 'no menu'}</small></li>`).join('');
   }
-  const roomTxt = mode === 'turbo' ? 'Toca do <b>modo Turbo</b>' : 'Toca <b>normal</b>';
+  const roomTxt = mode === 'normal' ? 'Toca do <b>modo Normal</b> (sem poderes)' : 'Toca do <b>modo Poderes</b>';
   const key = dotCls + '|' + text + '|' + note + '|' + chips + '|' + roomTxt;
   el.playBtn.disabled = conn !== 'online';
   if (!force && key === lobbyKey) return;
@@ -1844,7 +1843,7 @@ function renderLobby(force) {
   el.roomRow.hidden = false; el.roomName.innerHTML = roomTxt;
 }
 function roomLink() {
-  try { const u = new URL(location.href.split('#')[0]); u.searchParams.delete('debug'); if (mode === 'turbo') u.searchParams.set('modo', 'turbo'); else u.searchParams.delete('modo'); return u.toString(); }
+  try { const u = new URL(location.href.split('#')[0]); u.searchParams.delete('debug'); if (mode === 'normal') u.searchParams.set('modo', 'normal'); else u.searchParams.delete('modo'); return u.toString(); }
   catch (e) { return location.href.split('#')[0]; }
 }
 
@@ -1861,21 +1860,21 @@ function requestPlay() {
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send(Object.assign({ t: 'play' }, look()));
 }
-let lastRank = 99, kingT = -99, milestone = 0, turboTold = false, myStack = 0;
+let lastRank = 99, kingT = -99, milestone = 0, normalTold = false;
 function flash(text, col) {
   el.flashText.textContent = text; el.flash.style.setProperty('--fc', col);
   el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
   sfx('power');
 }
 function startPlaying() {
-  lastRank = 99; milestone = 0; myStack = 0; cds = {};
+  lastRank = 99; milestone = 0; cds = {};
   stats = { start: time, end: 0, bestRank: 99, maxMass: 30, kills: 0 }; death = null; myPowers = {};
   state = 'play'; input.aim = false; wantAngle = null; lastSent = { a: null, b: null, t: 0 };
   el.menu.hidden = true; el.over.hidden = true; el.hud.hidden = false;
   el.toasts.innerHTML = ''; hudT = 0; mmT = 0;
-  if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: o Turbo não acaba e se soma (1×, 2×, 3×…)', '#ffd23f'); }
   const sel = SKINS[skinIdx];
-  if (sel.lock && demonPw) toast(coarse ? 'Demônio: botões de poder à esquerda · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> serra · <b>Shift</b> turbo · <b>1</b> laser · <b>3</b> fogo azul · <b>4</b> boost 3× · <b>5</b> triplicar', '#ff3b1a');
+  if (classic) { if (!normalTold) { normalTold = true; toast('Modo Normal: sem poderes, só comer, crescer e cercar', '#8dff9a'); } }
+  else if (sel.lock && demonPw) toast(coarse ? 'Demônio: botões de poder à esquerda · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> serra · <b>Shift</b> turbo · <b>1</b> laser · <b>3</b> fogo azul · <b>4</b> boost 3× · <b>5</b> triplicar', '#ff3b1a');
   else if (sel.logo === 'vt') toast('VTURB: anda <b>1,5×</b> mais rápido e acelera <b>3×</b>', '#f20051');
   else if (sel.logo === 'da') toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
   updateBoard();
@@ -2003,14 +2002,14 @@ function updateKeysHint() {
 }
 updateKeysHint();
 function renderModes() {
-  for (const m of ['normal', 'turbo']) {
+  for (const m of ['poderes', 'normal']) {
     const b = $('#mode-' + m); if (!b) continue;
     b.setAttribute('aria-checked', String(m === mode));
-    const n = roomN[m === 'turbo' ? 'turbo' : 'geral'] || 0;
+    const n = roomN[m === 'normal' ? 'normal' : 'geral'] || 0;
     b.querySelector('.mcount').textContent = n ? `${n} na toca` : 'ninguém na toca';
   }
 }
-for (const m of ['normal', 'turbo']) $('#mode-' + m).addEventListener('click', () => setMode(m));
+for (const m of ['poderes', 'normal']) $('#mode-' + m).addEventListener('click', () => setMode(m));
 /* ================= chat da toca ================= */
 const chatEl = { btn: $('#chatBtn'), panel: $('#chatPanel'), log: $('#chatLog'), form: $('#chatForm'), inp: $('#chatIn'), badge: $('#chatBadge'), peek: $('#chatPeek'), close: $('#chatClose'), empty: $('#chatEmpty') };
 let chatOpen = false, chatUnread = 0;
@@ -2054,12 +2053,12 @@ chatEl.form.addEventListener('submit', e => {
 chatEl.inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); setChat(false); } });
 
 /* aviso de novidades: aparece uma vez para cada pessoa (por versão) e depois não aparece mais */
-const NEWS_ID = '2026-10-05b';
+const NEWS_ID = '2026-10-05c';
 const NEWS = [
-  ['turbo', '#f20051', 'Peles com poderes, grátis', 'As peles de bandeira e o gold saíram. VTURB (anda 1,5× mais rápido e acelera 3×) e Direct Ads (a cada 1.000 pontos nascem 2 filhotes que não te machucam) estão liberadas para todo mundo.'],
+  ['cresce', '#8dff9a', 'Novo: modo Normal', 'Escolha no menu. Sem esferas de poder e sem poderes de pele: só comer, crescer e cercar. O modo Turbo saiu.'],
+  ['ima', '#ff8a3d', 'Chat da toca', 'Converse com quem está na mesma toca. Na partida, aperte Enter para escrever.'],
+  ['turbo', '#f20051', 'Peles com poderes, grátis', 'VTURB anda 1,5× mais rápido e acelera 3×. Direct Ads ganha 2 filhotes a cada 1.000 pontos. Valem no modo Poderes.'],
   ['fogo', '#3aa8ff', 'Demônio ganhou poderes', '3 solta bolas de fogo azul, 4 dá um boost 3× mais rápido e 5 triplica o tamanho. O 1 continua sendo o laser.'],
-  ['laser', '#ff3b1a', 'Recarga na tela', 'Depois de usar um poder, um contador mostra quanto falta para usar de novo.'],
-  ['turbo', '#ffd23f', 'Modo Turbo e Inversão', 'No modo Turbo o Turbo não acaba e se soma. O poder Inversão deixa quem chega perto com os comandos invertidos.'],
 ];
 $('#newsList').innerHTML = NEWS.map(([ic, c, t, d]) => `<li><span class="news-ico" style="--c:${c}">${iconSVG(ic)}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('');
 const newsEl = $('#news');
