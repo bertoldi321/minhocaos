@@ -138,7 +138,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 #hud button{pointer-events:auto}
 .side{position:fixed;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);width:220px;display:grid;gap:10px;align-content:start}
 .stats{padding:12px 14px;display:grid;gap:6px}
-.len{display:flex;align-items:baseline;gap:8px}
+.len{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:2px;min-width:0}
 #lenVal{font:400 34px/1 var(--display);color:var(--clay);font-variant-numeric:tabular-nums}
 .len small{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim)}
 #rankLine{font-size:13px;color:var(--ink-dim);font-variant-numeric:tabular-nums}
@@ -352,7 +352,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 9;
+const PROTO = 10;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -384,7 +384,6 @@ const ABIL_UI = {
   fogo:  { key: '3',     name: 'Fogo azul',   icon: 'fogo',   col: '#3aa8ff', cd: 4 },
   boost: { key: '4',     name: 'Boost 3×',    icon: 'turbo',  col: '#ff6a3a', cd: 4 },
   grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 1 },
-  vturb: { key: 'Shift', name: 'Turbo VTURB', icon: 'turbo',  col: '#f20051', cd: 12 },
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
@@ -405,7 +404,7 @@ const SKINS = [
   { name: 'Carvão',   c: ['#e8e1d9', '#4d4152'] },
   { name: 'Cabeção',  c: ['#c49a6c', '#2b261b'], face: true },
   // peles com poderes (grátis)
-  { name: 'VTURB',      c: ['#ee492c', '#f0234a', '#f20051'], logo: 'vt', power: 'Turbo 3× mais rápido que o do mapa. Aperte Shift (recarga de 12 s).' },
+  { name: 'VTURB',      c: ['#ee492c', '#f0234a', '#f20051'], logo: 'vt', power: 'Anda 1,5× mais rápido que os outros e acelera 3× mais rápido (clique ou Espaço).' },
   { name: 'Direct Ads', c: ['#1fa1cd', '#fa4e51'],            logo: 'da', power: 'A cada 1.000 pontos nascem 2 filhotes iguais a você. Eles não te machucam.' },
   { name: 'Demônio',  c: ['#a8100c', '#1a0507'], lock: true },
 ];
@@ -424,7 +423,8 @@ const FOOD_COLS = ['#ff5c8a', '#ffd23f', '#7fe7ff', '#8dff9a', '#b9a7ff', '#ff8a
 const $ = s => document.querySelector(s);
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-const fmt = n => Math.max(0, Math.floor(n)).toLocaleString('pt-BR');
+const FMT_BIG = (() => { try { return new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }); } catch (e) { return null; } })();
+const fmt = n => { n = Math.max(0, Math.floor(n)); return n >= 1e7 && FMT_BIG ? FMT_BIG.format(n) : n.toLocaleString('pt-BR'); };
 function angDiff(a, b) { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU; return d; }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function hexToRgb(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
@@ -457,7 +457,8 @@ function parseSkin(s) {
 const NAME_JUNK = new RegExp('[' + [[0, 31], [127, 159], [173, 173], [8203, 8207], [8232, 8238], [8288, 8303], [65279, 65279]].map(r => String.fromCharCode(r[0]) + '-' + String.fromCharCode(r[1])).join('') + ']', 'g');
 function cleanName(s) { return typeof s === 'string' ? (s.replace(NAME_JUNK, '').trim().slice(0, 14) || 'Visitante') : 'Visitante'; }
 const segCount = mass => Math.min(MAX_SEG, Math.round(10 + Math.pow(Math.max(1, mass), .82) / 2));
-const radiusOf = m => 9 + Math.sqrt(Math.max(0, m)) * .42;
+// raio da minhoca: cresce normal até 100 mil de tamanho; depois cresce bem devagar (senão o Triplicar engoliria o mapa)
+const radiusOf = m => { m = Math.max(0, m); return m <= 1e5 ? 9 + Math.sqrt(m) * .42 : 141.8 + 10 * Math.log(m / 1e5); };
 const foodRadius = v => Math.min(14, 3.4 + Math.sqrt(v) * 1.9);
 
 /* ================= ícones ================= */
@@ -839,7 +840,9 @@ function placeWorm(w, rt) {
     else {
       const r = radiusOf(m), slow = f & (F_FROZEN | PBIT.lento), turbo = f & PBIT.turbo;
       const sup = w.demon && wantSuper && m > 20 && !slow && !turbo, boost = turbo || sup || (wantBoost && m > 20 && !slow);
-      const spd = e[8] || spdOf(f, boost, sup, (e[7] || 100) / 100);
+      const spd = w.sk === VTURB_SK
+        ? ((wantBoost && m > 20 && !slow) ? BOOST_SPEED * 3 : turbo ? TURBO_SPEED : BASE_SPEED * 1.5) * ((e[7] || 100) / 100) * (slow ? SLOW : 1)
+        : e[8] || spdOf(f, boost, sup, (e[7] || 100) / 100);
       let tr = clamp(5.4 - (r - 11) * .09, 2, 5.4); if (slow) tr *= .5;
       let d = angDiff(wantAngle === null ? w.pa : wantAngle, w.pa); if (f & F_INV) d = -d;   // comandos invertidos
       const mm = tr * predDt;
@@ -978,7 +981,7 @@ function onMessage(m) {
     case 'old': conn = 'old'; renderLobby(true); break;
     case 'full': conn = 'full'; renderLobby(true); break;
     case 'senha': onDemonReply(!!m.ok); break;
-    case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = +m.s || ABIL_UI[m.k].cd; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
+    case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = performance.now() + (+m.s || ABIL_UI[m.k].cd) * 1000; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
     case 'pups': toast(`<b>${m.n | 0} ${m.n === 1 ? 'filhote nasceu' : 'filhotes nasceram'}</b>: eles não te machucam`, '#1fa1cd'); sfx('power'); break;
   }
 }
@@ -1076,8 +1079,10 @@ sb.addEventListener('pointerdown', sOn);
 sb.addEventListener('pointerup', sOff); sb.addEventListener('pointercancel', sOff); sb.addEventListener('pointerleave', sOff);
 sb.addEventListener('contextmenu', e => e.preventDefault());
 // laser da pele Demônio: tecla 1 (no celular, o botão do laser)
-function myAbils() { return !me || !me.alive ? [] : me.demon ? ['laser', 'fogo', 'boost', 'grow'] : me.sk === VTURB_SK ? ['vturb'] : []; }
-function useAb(k) { if (state === 'play' && myAbils().includes(k) && !(cds[k] > 0)) send({ t: 'ab', k }); }
+function myAbils() { return !me || !me.alive ? [] : me.demon ? ['laser', 'fogo', 'boost', 'grow'] : []; }
+// quem decide a recarga é o servidor: o aperto sempre vai; a tela só mostra quanto falta
+function useAb(k) { if (state === 'play' && myAbils().includes(k)) send({ t: 'ab', k }); }
+function cdLeft(k) { const t = cds[k]; return t ? Math.max(0, (t - performance.now()) / 1000) : 0; }
 // celular: um botão para cada poder da pele (some quando a pele não tem poder)
 const abBar = $('#abilBar'); let abKey = '';
 function renderAbBar() {
@@ -1087,7 +1092,7 @@ function renderAbBar() {
     abBar.innerHTML = list.map(k => `<button type="button" data-k="${k}" aria-label="${ABIL_UI[k].name}" style="--c:${ABIL_UI[k].col}">${iconSVG(ABIL_UI[k].icon)}<i></i></button>`).join('');
   }
   abBar.hidden = !list.length;
-  for (const b of abBar.children) { const k = b.dataset.k, r = cds[k] > 0 ? cds[k] / ABIL_UI[k].cd : 0; b.style.setProperty('--p', r.toFixed(3)); b.classList.toggle('cool', r > 0); }
+  for (const b of abBar.children) { const k = b.dataset.k, r = cdLeft(k) / ABIL_UI[k].cd; b.style.setProperty('--p', r.toFixed(3)); b.classList.toggle('cool', r > 0); }
 }
 abBar.addEventListener('pointerdown', e => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); ensureAudio(); useAb(b.dataset.k); });
 abBar.addEventListener('contextmenu', e => e.preventDefault());
@@ -1097,7 +1102,7 @@ window.addEventListener('keydown', e => {
   if (tag === 'INPUT') return;
   const k = e.key;
   if (k === ' ') { if (tag !== 'BUTTON' || state === 'play') { input.sp = true; e.preventDefault(); } }
-  else if (k === 'Shift') { if (me && me.sk === VTURB_SK) { if (!e.repeat) useAb('vturb'); } else input.sh = true; }
+  else if (k === 'Shift') input.sh = true;
   else if (k === '1' || k === '3' || k === '4' || k === '5') { if (!e.repeat && state === 'play') { useAb({ 1: 'laser', 3: 'fogo', 4: 'boost', 5: 'grow' }[k]); e.preventDefault(); } }
   else if (k === 'ArrowUp' || k === 'w' || k === 'W') { if (tag !== 'BUTTON' || state === 'play') { input.bk = true; e.preventDefault(); } }
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { input.left = true; e.preventDefault(); }
@@ -1173,7 +1178,6 @@ function step(dt, now) {
     puff(p.x, p.y, Math.random() < .5 ? '#a6e22e' : '#d4ff6a', 1, 40, .7, radiusOf(w.mass) * .5);
   }
   borderEmbers(dt);
-  for (const k in cds) { cds[k] -= dt; if (cds[k] <= 0) delete cds[k]; }
   { const inv = !!(me && me.alive && me.inv && state === 'play'); if (inv && !wasInv) { toast('Comandos <b>invertidos</b>!', POWERS.inverte.color); sfx('bad'); } wasInv = inv; }
   demonEmbers(dt);
   updateParts(dt);
@@ -1188,7 +1192,8 @@ function updateCamera(dt) {
   if (me && me.alive && me.seen) {
     const k = 1 - Math.pow(.0005, dt);
     cam.x += (me.x - cam.x) * k; cam.y += (me.y - cam.y) * k;
-    tz = base * clamp(1.1 - (radiusOf(me.mass) - 11) * .02, .46, 1.1);
+    const rr = radiusOf(me.mass);
+    tz = base * clamp(1.1 - (rr - 11) * .02, rr > 100 ? Math.max(.25, 46 / rr) : .46, 1.1);   // minhoca gigante: a câmera se afasta mais
   } else if (state === 'menu') {
     attractT -= dt;
     if (!attract || !attract.alive || attractT <= 0) {
@@ -1725,7 +1730,7 @@ function updateChips() {
   for (const k of PKEYS) if (POWERS[k].dur && !(k === 'turbo' && mode === 'turbo')) setChip(k, alive ? (myPowers[k] || 0) : 0, POWERS[k].dur, POWERS[k].color, POWERS[k].name, k);
   setChip('frio', alive && me.frozen > 0 && !myPowers.gelo ? 1 : 0, 1, '#7fe7ff', 'Congelado por outra minhoca', 'gelo');
   setChip('inv', alive && me.inv ? 1 : 0, 1, POWERS.inverte.color, 'Comandos invertidos', 'inverte');
-  for (const k in ABIL_UI) setChip('ab_' + k, alive ? (cds[k] || 0) : 0, ABIL_UI[k].cd, ABIL_UI[k].col, ABIL_UI[k].name + ' recarregando', ABIL_UI[k].icon);
+  for (const k in ABIL_UI) setChip('ab_' + k, alive ? cdLeft(k) : 0, ABIL_UI[k].cd, ABIL_UI[k].col, ABIL_UI[k].name + ' recarregando', ABIL_UI[k].icon);
   setChip('vel', alive && mode === 'turbo' && (me.flags & PBIT.turbo) ? 1 : 0, 1, '#ffd23f', 'Turbos acumulados', 'turbo');
   sb.hidden = !(alive && me.demon && state === 'play');
   renderAbBar();
@@ -1819,7 +1824,7 @@ function startPlaying() {
   if (mode === 'turbo' && !turboTold) { turboTold = true; toast('Modo Turbo: o Turbo não acaba e se soma (1×, 2×, 3×…)', '#ffd23f'); }
   const sel = SKINS[skinIdx];
   if (sel.lock && demonPw) toast(coarse ? 'Demônio: botões de poder à esquerda · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> serra · <b>Shift</b> turbo · <b>1</b> laser · <b>3</b> fogo azul · <b>4</b> boost 3× · <b>5</b> triplicar', '#ff3b1a');
-  else if (sel.logo === 'vt') toast(coarse ? 'VTURB: botão à esquerda solta o turbo 3×' : 'VTURB: <b>Shift</b> solta o turbo 3×', '#f20051');
+  else if (sel.logo === 'vt') toast('VTURB: anda <b>1,5×</b> mais rápido e acelera <b>3×</b>', '#f20051');
   else if (sel.logo === 'da') toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
   updateBoard();
 }
@@ -1935,7 +1940,7 @@ function updateKeysHint() {
   const extra = demon
     ? (coarse ? 'os botões à esquerda soltam serra, laser, fogo azul, boost 3× e triplicar; o amarelo vira o turbo do demônio.'
               : '<kbd>Espaço</kbd> serra · <kbd>Shift</kbd> turbo · <kbd>1</kbd> laser · <kbd>3</kbd> fogo azul · <kbd>4</kbd> boost 3× · <kbd>5</kbd> triplicar')
-    : sel.logo === 'vt' ? (coarse ? 'o botão à esquerda solta o turbo 3×.' : '<kbd>Shift</kbd> solta o turbo 3× (recarga de 12 s)')
+    : sel.logo === 'vt' ? 'anda 1,5× mais rápido e acelera 3× mais rápido que os outros.'
     : sel.logo === 'da' ? 'a cada 1.000 pontos nascem 2 filhotes que te ajudam.' : '';
   const name = demon ? 'Demônio' : sel.name;
   $('#keysHint').innerHTML = (coarse
@@ -1957,7 +1962,7 @@ for (const m of ['normal', 'turbo']) $('#mode-' + m).addEventListener('click', (
 /* aviso de novidades: aparece uma vez para cada pessoa (por versão) e depois não aparece mais */
 const NEWS_ID = '2026-10-05b';
 const NEWS = [
-  ['turbo', '#f20051', 'Peles com poderes, grátis', 'As peles de bandeira e o gold saíram. VTURB (turbo 3× mais rápido no Shift) e Direct Ads (a cada 1.000 pontos nascem 2 filhotes que não te machucam) estão liberadas para todo mundo.'],
+  ['turbo', '#f20051', 'Peles com poderes, grátis', 'As peles de bandeira e o gold saíram. VTURB (anda 1,5× mais rápido e acelera 3×) e Direct Ads (a cada 1.000 pontos nascem 2 filhotes que não te machucam) estão liberadas para todo mundo.'],
   ['fogo', '#3aa8ff', 'Demônio ganhou poderes', '3 solta bolas de fogo azul, 4 dá um boost 3× mais rápido e 5 triplica o tamanho. O 1 continua sendo o laser.'],
   ['laser', '#ff3b1a', 'Recarga na tela', 'Depois de usar um poder, um contador mostra quanto falta para usar de novo.'],
   ['turbo', '#ffd23f', 'Modo Turbo e Inversão', 'No modo Turbo o Turbo não acaba e se soma. O poder Inversão deixa quem chega perto com os comandos invertidos.'],

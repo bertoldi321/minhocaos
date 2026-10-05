@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 9;
+const PROTO = 10;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
@@ -39,9 +39,8 @@ const ABIL = {
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
   grow:  { skin: 'a8100c1a0507', cd: 1 },                                   // 5: triplica de tamanho (até MAX_MASS)
-  vturb: { skin: 'ee492cf0234af20051', cd: 12, burst: 4, spd: 480 * 3 },     // VTURB: turbo 3× o do mapa
 };
-const MAX_MASS = 30000, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
+const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const TURBO_ORB_WEIGHTS = [['turbo', 45], ['ima', 25], ['dobro', 5], ['cresce', 5], ['inverte', 4], ['lento', 4], ['gelo', 4], ['fogo', 4], ['cego', 2], ['veneno', 1], ['serra', 1]];
@@ -70,7 +69,8 @@ const rng = (...a) => mulberry32(h32(...a));
 function orbType(r, wts) { let x = r * 100; for (const [k, w] of wts || ORB_WEIGHTS) { x -= w; if (x < 0) return k; } return 'ima'; }
 const segCount = mass => Math.min(MAX_SEG, Math.round(10 + Math.pow(Math.max(1, mass), .82) / 2));
 const massForSeg = n => n <= 10 ? 14 : Math.pow((n - 10) * 2, 1 / .82);
-const radiusOf = m => 9 + Math.sqrt(Math.max(0, m)) * .42;
+// raio da minhoca: cresce normal até 100 mil de tamanho; depois cresce bem devagar (senão o Triplicar engoliria o mapa)
+const radiusOf = m => { m = Math.max(0, m); return m <= 1e5 ? 9 + Math.sqrt(m) * .42 : 141.8 + 10 * Math.log(m / 1e5); };
 const foodRadius = v => Math.min(14, 3.4 + Math.sqrt(v) * 1.9);
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const enc2 = n => B64[(n >> 6) & 63] + B64[n & 63];
@@ -388,6 +388,10 @@ class Room {
     w.superOn = demon && !!w.wantSuper && w.mass > MIN_BOOST && !fz && !turbo;
     w.boosting = turbo || w.superOn || (w.wantBoost && w.mass > MIN_BOOST && !fz);
     let spd = turbo ? TURBO_SPEED : w.superOn ? DEMON_SPEED : w.boosting ? BOOST_SPEED : BASE_SPEED;
+    if (w.skin === VTURB_SK) {
+      const vb = w.wantBoost && w.mass > MIN_BOOST && !fz;
+      spd = vb ? BOOST_SPEED * 3 : turbo ? TURBO_SPEED : BASE_SPEED * 1.5;
+    }
     if (w.burstT > 0) { spd = Math.max(spd, w.burstSpd); w.boosting = true; }   // arrancada de poder: não gasta tamanho
     w.mult = w.stack ? Math.min(MAX_STACK, w.stack) : 1;
     spd *= w.mult;
@@ -551,10 +555,10 @@ class Room {
     const A = ABIL[k];
     if (!A || !w.alive || w.skin !== A.skin) return false;
     w.cds = w.cds || {};
-    if (w.cds[k] > 0) return false;
+    if (w.cds[k] > .08) return false;   // pequena folga para atraso de rede
     if (k === 'laser') this.fireLaser(w);
     else if (k === 'fogo') this.spawnFire(w, true);
-    else if (k === 'grow') w.mass = Math.min(MAX_MASS, w.mass * 3);
+    else if (k === 'grow') { if (w.mass >= MAX_MASS) return false; w.mass = Math.min(MAX_MASS, w.mass * 3); }
     else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
     w.cds[k] = A.cd;
     return true;
@@ -580,8 +584,9 @@ class Room {
     const w = [];
     for (const x of this.worms.values()) {
       const e = [x.id, Math.round(x.x), Math.round(x.y), Math.round(x.angle * 100), Math.round(x.mass), flagsOf(x), x.kills];
-      if (x.mult > 1 || x.burstT > 0) e.push(Math.round(x.mult * 100));
-      if (x.burstT > 0) e.push(Math.round(x.lastSpd));
+      const exact = x.burstT > 0 || x.skin === VTURB_SK;   // velocidade que o cliente não consegue deduzir sozinho
+      if (x.mult > 1 || exact) e.push(Math.round(x.mult * 100));
+      if (exact) e.push(Math.round(x.lastSpd));
       w.push(e);
     }
     const msg = JSON.stringify({ t: 's', k: this.tick, w, e: this.events });
