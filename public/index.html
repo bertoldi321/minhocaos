@@ -61,6 +61,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-o
 .skin.demon .pill{box-shadow:0 0 10px rgba(255,50,20,.45)}
 .dm-tag{justify-self:end;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,190,170,.75)}
 .dm-tag .lock{width:13px;height:13px}
+.dm-swap{text-decoration:underline;text-underline-offset:2px;margin-left:6px;cursor:pointer;color:#ffb3a1}
+.skin.demon.cooling .pill{filter:grayscale(.7) brightness(.7)}
 .demon-pw{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:-2px 0 4px}
 .demon-pw input{min-width:0;background:rgba(0,0,0,.32);border:1px solid rgba(255,70,30,.35);border-radius:10px;padding:10px 12px;color:var(--ink);font:600 16px var(--ui);letter-spacing:.12em;-webkit-user-select:text;user-select:text}
 .demon-pw input:focus{outline:none;border-color:#ff3b1a;box-shadow:0 0 0 3px rgba(255,59,26,.25)}
@@ -257,6 +259,8 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .ban-stats b{color:#1c1e21;font-variant-numeric:tabular-nums}
 .ban-rec{margin:4px 0 0;font-size:12.5px;color:#606770}
 .ban-rec.new{color:#1a7f37;font-weight:700}
+.ban-demon{color:#b3110d;font-weight:600}
+.ban-demon:empty{display:none}
 .ban-actions{display:flex;justify-content:flex-end;margin-top:16px}
 .ban-btn{border:0;border-radius:6px;background:#1877f2;color:#fff;font:600 15px Helvetica,Arial,system-ui,sans-serif;padding:10px 16px;text-align:center}
 .ban-btn:hover{background:#166fe5}
@@ -364,6 +368,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
       <p class="ban-cause" id="overCause"></p>
       <p class="ban-stats">Tamanho <b id="sMax">0</b> · Abates <b id="sKills">0</b> · Tempo <b id="sTime">0:00</b> · Melhor posição <b id="sRank">—</b></p>
       <p class="ban-rec" id="sRecord"></p>
+      <p class="ban-rec ban-demon" id="sDemon"></p>
       <div class="ban-actions"><button class="ban-btn" id="againBtn" type="button">Compre BM com o Marcos, e comece novamente</button></div>
     </div>
   </div>
@@ -388,7 +393,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 12;
+const PROTO = 13;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -419,7 +424,7 @@ const ABIL_UI = {
   laser: { key: '1',     name: 'Laser',       icon: 'laser',  col: '#ff3b1a', cd: 2 },
   fogo:  { key: '3',     name: 'Fogo azul',   icon: 'fogo',   col: '#3aa8ff', cd: 4 },
   boost: { key: '4',     name: 'Boost 3×',    icon: 'turbo',  col: '#ff6a3a', cd: 4 },
-  grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 1 },
+  grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 30 },
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
@@ -693,6 +698,13 @@ let meId = 0, myWormId = 0, me = null, myPowers = {}, prevFlags = 0;
 let state = 'menu', deadT = 0, stats = { start: 0, end: 0, bestRank: 99, maxMass: 30, kills: 0 }, death = null;
 let roster = [], rtt = 0;
 let demonPw = store.get('minhocaos.demon', ''), pendingPw = '';
+// senha 321321: a pele fica 10 min bloqueada depois de morrer ('limited'); senha 4141: sem limite ('full')
+let demonTier = '', demonBanUntil = 0, diedAsDemon = false;
+const demonBanLeft = () => Math.max(0, (demonBanUntil - performance.now()) / 1000);
+const mmss = t => { t = Math.ceil(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+// identificador do aparelho (aleatório): é por ele que o servidor sabe da recarga da pele
+let devId = store.get('minhocaos.dev', '');
+if (!/^[a-z0-9]{8,32}$/.test(devId)) { devId = randomL() + randomL() + randomL(); store.set('minhocaos.dev', devId); }
 // a pele escolhida fica guardada pelo código de cores (antes era pela posição na lista, e o 8 era o Demônio)
 let skinIdx = SKINS.findIndex(s => skinStr(s.c) === store.get('minhocaos.skin2', ''));
 if (skinIdx < 0) { const o = parseInt(store.get('minhocaos.skin', '0'), 10) || 0; skinIdx = o === 8 ? DEMON_IDX : clamp(o, 0, 7); }
@@ -1015,7 +1027,8 @@ function onMessage(m) {
     case 'p': { const r = performance.now() - m.c; rttAvg = rttAvg ? rttAvg * .6 + r * .4 : r; rtt = Math.round(rttAvg); break; }
     case 'old': conn = 'old'; renderLobby(true); break;
     case 'full': conn = 'full'; renderLobby(true); break;
-    case 'senha': onDemonReply(!!m.ok); break;
+    case 'senha': setDemonState(m); onDemonReply(!!m.ok); break;
+    case 'demon': setDemonState(m); break;
     case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = performance.now() + (+m.s || ABIL_UI[m.k].cd) * 1000; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
     case 'chat': addChat(m); break;
     case 'chatlog': chatEl.log.innerHTML = ''; for (const q of Array.isArray(m.l) ? m.l : []) addChat(q, true); break;
@@ -1051,7 +1064,7 @@ function connect() {
   let s;
   try { s = new WebSocket(wsUrl()); } catch (e) { schedule(); return; }
   ws = s;
-  s.onopen = () => { retry = 0; s.send(JSON.stringify(Object.assign({ t: 'hi', v: PROTO, r: roomName }, look()))); };
+  s.onopen = () => { retry = 0; s.send(JSON.stringify(Object.assign({ t: 'hi', v: PROTO, r: roomName, d: devId }, look()))); };
   s.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } try { onMessage(m); } catch (e) { console.error(e); } };
   s.onclose = () => {
     if (ws !== s) return;
@@ -1856,6 +1869,7 @@ function toggleSound() {
 }
 function requestPlay() {
   ensureAudio();
+  if (skinIdx === DEMON_IDX && demonBanLeft() > 0) { selectSkin(0); toast(`Pele <b>Demônio</b> volta em ${mmss(demonBanLeft())}`, '#ff3b1a'); }
   store.set('minhocaos.name', el.name.value.trim());
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send(Object.assign({ t: 'play' }, look()));
@@ -1875,12 +1889,13 @@ function startPlaying() {
   const sel = SKINS[skinIdx];
   if (classic) { if (!normalTold) { normalTold = true; toast('Modo Normal: sem poderes, só comer, crescer e cercar', '#8dff9a'); } }
   else if (sel.lock && demonPw) toast(coarse ? 'Demônio: botões de poder à esquerda · amarelo é o turbo do demônio' : 'Demônio: <b>Espaço</b> serra · <b>Shift</b> turbo · <b>1</b> laser · <b>3</b> fogo azul · <b>4</b> boost 3× · <b>5</b> triplicar', '#ff3b1a');
+  if (!classic && sel.lock && demonPw && demonTier === 'limited') toast('Senha com recarga: se morrer, a pele Demônio fica <b>10 min</b> bloqueada', '#ff3b1a');
   else if (sel.logo === 'vt') toast('VTURB: anda <b>1,5×</b> mais rápido e acelera <b>3×</b>', '#f20051');
   else if (sel.logo === 'da') toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
   updateBoard();
 }
 function playerDied(by, cause) {
-  state = 'dead'; deadT = 1.4; stats.end = time;
+  state = 'dead'; deadT = 1.4; stats.end = time; diedAsDemon = !!(me && me.demon);
   death = { by: by ? by.name : null, cause };
   sfx('die');
 }
@@ -1903,11 +1918,14 @@ function showOver() {
   const rec = $('#sRecord');
   if (mine > best) { store.set('minhocaos.best', String(mine)); rec.textContent = 'Novo recorde!'; rec.classList.add('new'); }
   else { rec.textContent = `Seu recorde: ${fmt(best)}`; rec.classList.remove('new'); }
+  const dl = $('#sDemon'), left = diedAsDemon && demonTier === 'limited' ? demonBanLeft() : 0;
+  dl.textContent = left > 0 ? `Pele Demônio em recarga: volta em ${mmss(left)}. Até lá você joga com outra pele.` : '';
   el.hud.hidden = true; el.over.hidden = false;
   $('#againBtn').focus({ preventScroll: true });
 }
 function showMenu() {
   state = 'menu'; myWormId = 0;
+  if (skinIdx === DEMON_IDX && demonTier === 'limited' && demonBanLeft() > 0) selectSkin(0);   // pele em recarga: troca para outra
   if (me) me.isMe = false;
   me = null;
   el.over.hidden = true; el.hud.hidden = true; el.menu.hidden = false;
@@ -1936,8 +1954,22 @@ function selectSkin(i) {
 }
 function demonLabel() {
   const b = $('#skin-' + DEMON_IDX); if (!b) return;
-  b.querySelector('.dm-tag').innerHTML = demonPw ? 'liberada' : LOCK_SVG + 'com senha';
+  const left = demonTier === 'limited' ? demonBanLeft() : 0;
+  const html = !demonPw ? LOCK_SVG + 'com senha'
+    : left > 0 ? `volta em ${mmss(left)} <u class="dm-swap">trocar senha</u>`
+    : demonTier === 'full' ? 'ilimitada'
+    : demonTier === 'limited' ? `10 min ao morrer <u class="dm-swap">trocar senha</u>`
+    : 'liberada';
+  const tag = b.querySelector('.dm-tag'); if (tag.innerHTML !== html) tag.innerHTML = html;
+  b.classList.toggle('cooling', left > 0);
 }
+function setDemonState(m) {
+  if (typeof m.tier === 'string') demonTier = m.tier;
+  demonBanUntil = m.ban > 0 ? performance.now() + m.ban * 1000 : 0;
+  if (demonBanLeft() > 0 && skinIdx === DEMON_IDX && state !== 'play') selectSkin(0);
+  demonLabel();
+}
+setInterval(() => { if (demonTier === 'limited' && demonBanUntil) { demonLabel(); if (demonBanLeft() <= 0) { demonBanUntil = 0; demonLabel(); } } }, 1000);
 function pillBg(s) {
   const st = SKIN_STYLE[skinStr(s.c)], c = st ? st.body : s.c;
   const stripes = `repeating-linear-gradient(90deg,${c.map((x, k) => `${x} ${k * 10}px ${(k + 1) * 10}px`).join(',')})`;
@@ -1956,9 +1988,10 @@ SKINS.forEach((s, i) => {
   }
   b.innerHTML = (s.face ? `<img class="face-thumb" src="${FACE_SRC}" alt="">` : '') + `<span class="pill" style="background:${pillBg(s)}"></span><span class="sk-name">${s.name}</span>`
     + (s.lock ? '<span class="dm-tag"></span>' : '');
-  b.addEventListener('click', () => {
+  b.addEventListener('click', e => {
     el.demonBox.hidden = true;
-    if (s.lock && !demonPw) { el.demonBox.hidden = false; el.demonMsg.textContent = ''; el.demonIn.focus(); return; }
+    if (s.lock && (!demonPw || (e && e.target && e.target.closest('.dm-swap')))) { el.demonBox.hidden = false; el.demonMsg.textContent = demonPw ? 'Digite a outra senha.' : ''; el.demonIn.focus(); return; }
+    if (s.lock && demonBanLeft() > 0) { el.demonBox.hidden = false; el.demonMsg.textContent = `A pele Demônio está em recarga: volta em ${mmss(demonBanLeft())}. Com a senha sem limite, ela não tem recarga.`; return; }
     selectSkin(i);
   });
   (s.lock ? powEl : skinsEl).appendChild(b);
@@ -1976,8 +2009,9 @@ function onDemonReply(ok) {
   if (ok) {
     demonPw = pendingPw; store.set('minhocaos.demon', demonPw);
     el.demonBox.hidden = true; el.demonIn.value = '';
-    demonLabel(); selectSkin(DEMON_IDX);
-    toast('Pele <b>Demônio</b> liberada', '#ff3b1a');
+    demonLabel();
+    if (demonBanLeft() > 0) toast(`Pele <b>Demônio</b>: volta em ${mmss(demonBanLeft())}`, '#ff3b1a');
+    else { selectSkin(DEMON_IDX); toast(demonTier === 'full' ? 'Pele <b>Demônio</b> liberada, sem limite' : 'Pele <b>Demônio</b> liberada · se morrer, fica 10 min bloqueada', '#ff3b1a'); }
   } else {
     el.demonMsg.textContent = 'Senha errada.'; el.demonIn.select();
   }

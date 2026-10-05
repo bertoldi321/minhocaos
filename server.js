@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 12;
+const PROTO = 13;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -37,7 +37,7 @@ const ABIL = {
   laser: { skin: 'a8100c1a0507', cd: 2 },
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
-  grow:  { skin: 'a8100c1a0507', cd: 1 },                                   // 5: triplica de tamanho (até MAX_MASS)
+  grow:  { skin: 'a8100c1a0507', cd: 30 },                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
@@ -76,8 +76,18 @@ const NAME_JUNK = new RegExp('[' + [[0, 31], [127, 159], [173, 173], [8203, 8207
 function cleanName(s) { return typeof s === 'string' ? (s.replace(NAME_JUNK, '').trim().slice(0, 14) || 'Visitante') : 'Visitante'; }
 function cleanSkin(s) { return typeof s === 'string' && /^([0-9a-f]{6}){1,3}$/i.test(s) ? s.toLowerCase() : 'ff7a2fffb347'; }
 // pele Demônio: só para quem mandou a senha certa (guardamos apenas o hash)
-const DEMON_SK = 'a8100c1a0507', DEMON_HASH = 'e8e1d4fdc13d856b51630e48c4440720b7709683768ba3eab8bf7f75cd6eb2ce', PW_TRIES = 8;
-const isDemonPw = s => typeof s === 'string' && s.length <= 40 && crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex') === DEMON_HASH;
+// duas senhas: uma com recarga de 10 min depois de morrer ('limited'), outra sem limite ('full'). Só guardamos os hashes.
+const DEMON_SK = 'a8100c1a0507', PW_TRIES = 8;
+const DEMON_HASHES = { e8e1d4fdc13d856b51630e48c4440720b7709683768ba3eab8bf7f75cd6eb2ce: 'limited', aea05ab284469cc3826788c5dcfb52070749914b8de5a789b497d18618d68794: 'full' };
+const demonTier = s => typeof s === 'string' && s.length <= 40 ? DEMON_HASHES[crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex')] || '' : '';
+// recarga da pele: vale para o aparelho e para a internet de quem morreu (recarregar a página ou aba anônima não pula)
+const DEMON_BAN_MS = 10 * 60 * 1000, demonBans = new Map();
+function banLeft(c) {
+  const now = Date.now(); let t = 0;
+  for (const k of [c.dev && 'd:' + c.dev, c.ip && 'i:' + c.ip]) { if (!k) continue; const u = demonBans.get(k); if (u > now) t = Math.max(t, u - now); }
+  return t;
+}
+function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';   // peles com poderes (grátis)
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
@@ -540,6 +550,7 @@ class Room {
     if (by && by.alive !== undefined && by !== w) by.kills++;
     this.events.push(['k', w.id, by ? by.id : 0, cause]);
     if (!w.pup) for (const o of this.worms.values()) if (o.pup && o.fam === w.id && o.alive) this.kill(o, null, 'orphan');
+    if (w.skin === DEMON_SK && w.client && w.client.demon === 'limited') { banDemon(w.client); w.client.sendDemon(); }
   }
   cut(o, i, by, cause) {
     const pts = o.pts; if (i - 1 >= pts.length) return;
@@ -693,16 +704,19 @@ class Client {
     else this.handle(data.toString());
   }
   tryPw(s) {
-    if (this.demon) return true;
-    if (typeof s !== 'string' || !s || this.pwTries >= PW_TRIES) return false;
-    if (isDemonPw(s)) return (this.demon = true);
-    this.pwTries++; return false;
+    if (this.demon === 'full') return true;
+    if (typeof s !== 'string' || !s || this.pwTries >= PW_TRIES) return !!this.demon;
+    const t = demonTier(s);
+    if (t) { if (t === 'full' || !this.demon) this.demon = t; return true; }   // a senha sem limite vale mais
+    this.pwTries++; return !!this.demon;
   }
+  sendDemon() { this.send({ t: 'demon', tier: this.demon || '', ban: this.demon === 'limited' ? Math.ceil(banLeft(this) / 1000) : 0 }); }
   look(m) {
     this.name = cleanName(m.n);
     if (m.s !== undefined) this.tryPw(m.s);
     const k = cleanSkin(m.k);
-    this.skin = k === DEMON_SK && !this.demon ? 'ff7a2fffb347' : k;
+    const blocked = k === DEMON_SK && (!this.demon || (this.demon === 'limited' && banLeft(this) > 0));
+    this.skin = blocked ? 'ff7a2fffb347' : k;
   }
   handle(text) {
     if (!this.open) return;
@@ -712,7 +726,9 @@ class Client {
       case 'hi': {
         if (this.room) return;
         if (m.v !== PROTO) { this.send({ t: 'old' }); return; }
+        this.dev = typeof m.d === 'string' && /^[a-z0-9]{8,32}$/.test(m.d) ? m.d : '';
         this.look(m);
+        if (this.demon) this.sendDemon();
         const r = getRoom(cleanRoom(m.r));
         if (!r) { this.send({ t: 'full' }); return; }
         if (r.clients.size >= MAX_PLAYERS) { this.send({ t: 'full' }); return; }
@@ -737,9 +753,11 @@ class Client {
         for (const c of r.clients) c.sendText(out);
         break;
       }
-      case 'senha':
-        this.send({ t: 'senha', ok: this.tryPw(m.s) });
+      case 'senha': {
+        const before = this.demon, ok = this.tryPw(m.s) && (demonTier(m.s) || before === 'full');
+        this.send({ t: 'senha', ok: !!ok, tier: this.demon || '', ban: this.demon === 'limited' ? Math.ceil(banLeft(this) / 1000) : 0 });
         break;
+      }
       case 'play':
         if (!this.room || (this.worm && this.worm.alive)) return;
         this.look(m);
@@ -800,6 +818,7 @@ server.on('upgrade', (req, sock, head) => {
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   sock.setNoDelay(true);
   const c = new Client(sock);
+  c.ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim().slice(0, 64);
   sock.on('data', d => c.feed(d));
   sock.on('close', () => c.cleanup());
   sock.on('error', () => c.destroy());
@@ -827,6 +846,7 @@ setInterval(() => {
     else c.rawWrite(frame(9, Buffer.alloc(0)));
   }
   for (const [name, r] of rooms) if (!r.clients.size && r.emptySince && now - r.emptySince > 60000) rooms.delete(name);
+  for (const [k, u] of demonBans) if (u <= now) demonBans.delete(k);
 }, 15000);
 
 server.listen(PORT, () => console.log(`Minhocaos rodando na porta ${PORT}`));
