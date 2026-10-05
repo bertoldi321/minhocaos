@@ -175,6 +175,30 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 #sawBtn.on{background:rgba(255,59,26,.45)}
 @media (pointer:coarse){#sawBtn{display:grid}}
 /* celular: botões dos poderes da pele, empilhados acima do botão da serra */
+/* chat da toca: botão no canto, painel com as mensagens; fechado, as novas aparecem rapidinho */
+.chat{position:fixed;z-index:25;left:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);display:flex;flex-direction:column-reverse;align-items:flex-start;gap:8px;width:min(340px,calc(100vw - 32px));pointer-events:none}
+.chat > *{pointer-events:auto}
+.chat-btn{position:relative;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);color:var(--ink);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.chat-btn svg{width:21px;height:21px}
+.chat-btn[aria-expanded="true"]{border-color:var(--clay);color:var(--clay)}
+.chat-badge{position:absolute;right:-3px;top:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--clay);color:var(--clay-ink);font:700 11px/18px var(--ui);text-align:center}
+.chat-panel{width:100%;display:grid;gap:8px;padding:10px;background:var(--panel-solid);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.chat-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
+.chat-head b{font-weight:600}
+.chat-x{border:0;background:transparent;font-size:22px;line-height:1;color:var(--ink-dim);width:28px;height:28px;border-radius:50%}
+.chat-x:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.chat-log{list-style:none;margin:0;padding:0 2px;max-height:min(240px,38vh);overflow-y:auto;display:grid;gap:5px;font-size:14px;line-height:1.35;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.chat-log b,.chat-peek b{font-weight:700}
+.chat-log li.me b{text-decoration:underline;text-underline-offset:2px}
+.chat-empty{margin:0;font-size:13px;color:var(--ink-dim)}
+.chat-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.chat-form input{min-width:0;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--ink);font:500 15px var(--ui);-webkit-user-select:text;user-select:text}
+.chat-form input:focus{outline:none;border-color:var(--clay)}
+.chat-form button{border:0;border-radius:10px;background:var(--clay);color:var(--clay-ink);font-weight:700;padding:0 14px}
+.chat-peek{list-style:none;margin:0;padding:0;display:grid;gap:4px;pointer-events:none!important}
+.chat-peek li{justify-self:start;max-width:100%;padding:5px 10px;border-radius:10px;background:rgba(15,9,18,.72);font-size:13.5px;line-height:1.35;overflow-wrap:anywhere;animation:peek 9s forwards}
+@keyframes peek{0%{opacity:0;transform:translateY(4px)}4%,80%{opacity:1;transform:none}100%{opacity:0}}
+@media (pointer:coarse){.chat{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 40px);left:12px;flex-direction:column}}
 .abil-bar{position:fixed;left:30px;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);display:none;flex-direction:column-reverse;gap:10px}
 .abil-bar button{position:relative;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:rgba(20,10,22,.55);border:2px solid var(--c);color:var(--c);touch-action:none;overflow:hidden}
 .abil-bar button svg{width:26px;height:26px;position:relative;z-index:1}
@@ -346,13 +370,24 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 
 <div id="flash" aria-hidden="true"><span id="flashText"></span></div>
 <div id="perf" class="perf" aria-hidden="true"></div>
+<div id="chat" class="chat">
+  <button id="chatBtn" class="chat-btn" type="button" aria-label="Abrir o chat" aria-expanded="false" aria-controls="chatPanel"><span class="chat-badge" id="chatBadge" hidden></span></button>
+  <div class="chat-panel" id="chatPanel" hidden>
+    <div class="chat-head"><b>Chat da toca</b><button type="button" class="chat-x" id="chatClose" aria-label="Fechar o chat">&times;</button></div>
+    <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
+    <p class="chat-empty" id="chatEmpty">Ninguém falou nada ainda. Diga oi!</p>
+    <form class="chat-form" id="chatForm" autocomplete="off"><input id="chatIn" maxlength="120" placeholder="Escreva e aperte Enter" spellcheck="false" aria-label="Mensagem"><button type="submit">Enviar</button></form>
+  </div>
+  <ul class="chat-peek" id="chatPeek" aria-hidden="true"></ul>
+</div>
+
 
 <script>
 (() => {
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 10;
+const PROTO = 11;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -869,6 +904,7 @@ function placeWorm(w, rt) {
 
 /* ================= mensagens do servidor ================= */
 function onWelcome(m) {
+  chatEl.log.innerHTML = ''; chatEl.empty.hidden = false;   // trocou de toca: o chat é outro
   orbWts = m.mode === 'turbo' ? TURBO_ORB_WEIGHTS : ORB_WEIGHTS;
   seed = m.seed | 0 || 1; tickMs = m.tickMs || 25; meId = m.me;
   for (const w of [...worms.values()]) dropWorm(w);
@@ -982,6 +1018,8 @@ function onMessage(m) {
     case 'full': conn = 'full'; renderLobby(true); break;
     case 'senha': onDemonReply(!!m.ok); break;
     case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = performance.now() + (+m.s || ABIL_UI[m.k].cd) * 1000; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
+    case 'chat': addChat(m); break;
+    case 'chatlog': chatEl.log.innerHTML = ''; for (const q of Array.isArray(m.l) ? m.l : []) addChat(q, true); break;
     case 'pups': toast(`<b>${m.n | 0} ${m.n === 1 ? 'filhote nasceu' : 'filhotes nasceram'}</b>: eles não te machucam`, '#1fa1cd'); sfx('power'); break;
   }
 }
@@ -1109,6 +1147,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') { input.right = true; e.preventDefault(); }
   else if (k === 'm' || k === 'M') toggleSound();
   else if (k === 'Enter' && state === 'over' && tag !== 'BUTTON') requestPlay();
+  else if (k === 'Enter' && state === 'play') { e.preventDefault(); setChat(true, true); }
 });
 window.addEventListener('keyup', e => {
   const k = e.key;
@@ -1624,6 +1663,19 @@ function render() {
     ctx.font = w === me ? '600 12px Rubik, system-ui, sans-serif' : '700 13px Rubik, system-ui, sans-serif';
     ctx.fillStyle = w === me ? '#ffc496' : '#ffffff';
     ctx.strokeText(w.name, sx, sy); ctx.fillText(w.name, sx, sy);
+    if (w.say) {
+      if (time > w.sayT) { w.say = null; continue; }
+      const top = (w.y - cam.y) * z + H / 2 - r * z * (w.style && (w.style.face || w.style.logo) ? 2.3 : 1.6) - 14;
+      ctx.save(); ctx.globalAlpha = Math.min(1, (w.sayT - time) / .6);
+      ctx.font = '600 13px Rubik, system-ui, sans-serif'; ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(w.say).width, bw = tw + 18, bh = 24, bx = sx - bw / 2, by = top - bh;
+      ctx.fillStyle = 'rgba(255,250,243,.95)'; ctx.beginPath();
+      ctx.moveTo(bx + 10, by); ctx.lineTo(bx + bw - 10, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + 10); ctx.lineTo(bx + bw, by + bh - 10); ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - 10, by + bh);
+      ctx.lineTo(sx + 6, by + bh); ctx.lineTo(sx, by + bh + 7); ctx.lineTo(sx - 6, by + bh);
+      ctx.lineTo(bx + 10, by + bh); ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - 10); ctx.lineTo(bx, by + 10); ctx.quadraticCurveTo(bx, by, bx + 10, by); ctx.fill();
+      ctx.fillStyle = '#1d1322'; ctx.fillText(w.say, sx, by + bh / 2 + 1);
+      ctx.restore();
+    }
   }
   const blind = !!(me && me.alive && me.powers.cego);
   if ((state === 'play' || state === 'dead') && !blind) {
@@ -1945,8 +1997,8 @@ function updateKeysHint() {
   const name = demon ? 'Demônio' : sel.name;
   $('#keysHint').innerHTML = (coarse
     ? 'Toque e arraste para guiar. Segure o botão amarelo (ou um segundo dedo na tela) para acelerar.'
-    : (demon ? '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>M</kbd> som'
-             : '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> ou <kbd>Espaço</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>M</kbd> som'))
+    : (demon ? '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>Enter</kbd> chat · <kbd>M</kbd> som'
+             : '<kbd>Mouse</kbd> guia · <kbd>Clique</kbd> ou <kbd>Espaço</kbd> acelera · <kbd>←</kbd><kbd>→</kbd> também viram · <kbd>Enter</kbd> chat · <kbd>M</kbd> som'))
     + (extra ? `<br><b class="dm-hint">${name}:</b> ${extra}` : '');
 }
 updateKeysHint();
@@ -1959,6 +2011,48 @@ function renderModes() {
   }
 }
 for (const m of ['normal', 'turbo']) $('#mode-' + m).addEventListener('click', () => setMode(m));
+/* ================= chat da toca ================= */
+const chatEl = { btn: $('#chatBtn'), panel: $('#chatPanel'), log: $('#chatLog'), form: $('#chatForm'), inp: $('#chatIn'), badge: $('#chatBadge'), peek: $('#chatPeek'), close: $('#chatClose'), empty: $('#chatEmpty') };
+let chatOpen = false, chatUnread = 0;
+chatEl.btn.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.6 3.8c-.5.4-1.4.1-1.4-.6V16h0A2.5 2.5 0 0 1 4 13.5v-8A2.5 2.5 0 0 1 6.5 3z"/></svg>');
+function chatLine(m) {
+  const col = /^[0-9a-f]{6}$/i.test(m.c) ? '#' + m.c : '#ff8a3d';
+  return `<b style="color:${col}">${esc(cleanName(m.n))}:</b> ${esc(String(m.x || '').slice(0, 120))}`;
+}
+function renderBadge() { chatEl.badge.hidden = !chatUnread; chatEl.badge.textContent = chatUnread > 9 ? '9+' : String(chatUnread); }
+function addChat(m, quiet) {
+  if (!m || !m.x) return;
+  const mine = m.id === meId;
+  const li = document.createElement('li'); li.innerHTML = chatLine(m); if (mine) li.className = 'me';
+  chatEl.log.appendChild(li); chatEl.empty.hidden = true;
+  while (chatEl.log.children.length > 60) chatEl.log.firstChild.remove();
+  if (chatOpen) chatEl.log.scrollTop = chatEl.log.scrollHeight;
+  if (quiet) return;
+  if (m.w) { const w = worms.get(m.w); if (w) { const t = String(m.x); w.say = t.length > 42 ? t.slice(0, 40) + '…' : t; w.sayT = time + 5; } }
+  if (!chatOpen) {
+    const p = document.createElement('li'); p.innerHTML = chatLine(m); chatEl.peek.appendChild(p);
+    while (chatEl.peek.children.length > 4) chatEl.peek.firstChild.remove();
+    setTimeout(() => p.remove(), 9000);
+    if (!mine) { chatUnread++; renderBadge(); }
+  }
+}
+function setChat(open, focus) {
+  chatOpen = open; chatEl.panel.hidden = !open; chatEl.peek.hidden = open;
+  chatEl.btn.setAttribute('aria-expanded', String(open)); chatEl.btn.setAttribute('aria-label', open ? 'Fechar o chat' : 'Abrir o chat');
+  if (open) { chatUnread = 0; renderBadge(); chatEl.peek.innerHTML = ''; chatEl.log.scrollTop = chatEl.log.scrollHeight; if (focus) chatEl.inp.focus({ preventScroll: true }); }
+  else chatEl.inp.blur();
+}
+chatEl.btn.addEventListener('click', () => setChat(!chatOpen, true));
+chatEl.close.addEventListener('click', () => setChat(false));
+chatEl.form.addEventListener('submit', e => {
+  e.preventDefault();
+  const x = chatEl.inp.value.trim();
+  if (x) { if (conn === 'online') send({ t: 'chat', x }); else toast('Sem conexão com o servidor', '#b9a9b3'); }
+  chatEl.inp.value = '';
+  if (state === 'play') setChat(false);   // na partida: manda e volta a jogar
+});
+chatEl.inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); setChat(false); } });
+
 /* aviso de novidades: aparece uma vez para cada pessoa (por versão) e depois não aparece mais */
 const NEWS_ID = '2026-10-05b';
 const NEWS = [

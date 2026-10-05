@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 10;
+const PROTO = 11;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const MAX_STACK = 25;                       // modo Turbo: o Turbo não acaba e se soma (1 Turbo = 1×, 2 = 2×, 3 = 3×…)
@@ -81,6 +81,9 @@ function cleanSkin(s) { return typeof s === 'string' && /^([0-9a-f]{6}){1,3}$/i.
 const DEMON_SK = 'a8100c1a0507', DEMON_HASH = 'e8e1d4fdc13d856b51630e48c4440720b7709683768ba3eab8bf7f75cd6eb2ce', PW_TRIES = 8;
 const isDemonPw = s => typeof s === 'string' && s.length <= 40 && crypto.createHash('sha256').update('minhocaos-demonio:' + s).digest('hex') === DEMON_HASH;
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';   // peles com poderes (grátis)
+// chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
+const CHAT_MAX = 120, CHAT_KEEP = 30;
+function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
 function cleanRoom(r) { return r === 'turbo' ? 'turbo' : 'geral'; }   // duas tocas: normal e modo Turbo   // uma toca só para todo mundo
 const num = v => typeof v === 'number' && isFinite(v);
 
@@ -131,6 +134,7 @@ class Room {
     for (let i = 0; i < FOOD_N; i++) this.fAdd(this.slots[i]);
     this.emptySince = Date.now(); this.rosterT = 0;
     this.bot = null; this.botT = 1;
+    this.chat = [];                                   // últimas mensagens, para quem entra depois
   }
   gCell(v) { const c = Math.floor((v + WORLD_R) / CELL) + 2; return c >= 0 ? (c < GN ? c : GN - 1) : 0; }
   fCell(v) { const c = Math.floor((v + WORLD_R) / FCELL) + 2; return c >= 0 ? (c < FGN ? c : FGN - 1) : 0; }
@@ -139,6 +143,7 @@ class Room {
   join(c) {
     this.clients.add(c); c.room = this; this.emptySince = 0;
     this.sendWelcome(c);
+    if (this.chat.length) c.send({ t: 'chatlog', l: this.chat });
     rosterAll();
   }
   leave(c) {
@@ -625,6 +630,7 @@ class Client {
     this.id = nextClient++; this.sock = sock; this.buf = Buffer.alloc(0); this.frag = null; this.fragOp = 0; this.fragLen = 0;
     this.open = true; this.lastSeen = Date.now(); this.room = null; this.worm = null;
     this.name = 'Visitante'; this.skin = 'ff7a2fffb347'; this.demon = false; this.pwTries = 0;
+    this.chatT = 0; this.chatN = 0; this.chatW = 0;
     this.rateT = Date.now(); this.rateN = 0;
     clients.add(this);
   }
@@ -718,6 +724,20 @@ class Client {
         this.look(m);
         if (this.room) this.room.sendRoster();
         break;
+      case 'chat': {
+        if (!this.room) return;
+        const x = cleanChat(m.x); if (!x) return;
+        const now = Date.now();
+        if (now - this.chatT < 700) return;                                  // no máximo uma mensagem a cada 0,7 s
+        if (now - this.chatW > 10000) { this.chatW = now; this.chatN = 0; }
+        if (++this.chatN > 6) return;                                        // e 6 a cada 10 s
+        this.chatT = now;
+        const msg = { id: this.id, n: this.name, c: this.skin.slice(0, 6), x, w: this.worm && this.worm.alive ? this.worm.id : 0 };
+        const r = this.room; r.chat.push(msg); if (r.chat.length > CHAT_KEEP) r.chat.shift();
+        const out = JSON.stringify(Object.assign({ t: 'chat' }, msg));
+        for (const c of r.clients) c.sendText(out);
+        break;
+      }
       case 'senha':
         this.send({ t: 'senha', ok: this.tryPw(m.s) });
         break;
