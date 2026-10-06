@@ -747,6 +747,7 @@ function addDrop(id, x, y, v, col, pop, coin) {
   if (drops.has(id) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(v)) return;
   const R = rng(id, 77), c = /^[0-9a-f]{6}$/i.test(col) ? '#' + col : '#ffe9d6';
   const f = mkFood(x, y, v, c, R() * TAU, coin ? 3 : (R() * 3) | 0);   // 3 = moeda da KashPay
+  if (coin) f.r = 26;   // moeda grande da KashPay
   f.id = id; f.pop = pop ? 0 : 1; drops.set(id, f); foods.push(f);
 }
 function endDrop(id, eater) {

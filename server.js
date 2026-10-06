@@ -90,7 +90,7 @@ function banLeft(c) {
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
-const KASH_EAT = 1.5, KASH_COINS = 36;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
+const KASH_EAT = 1.5, KASH_COINS = 24, COIN_R = 26;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
 function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
@@ -214,7 +214,7 @@ class Room {
     if (this.drops.size >= MAX_DROPS) return;
     const r2 = x * x + y * y, lim = (WORLD_R - 20) ** 2;
     if (r2 > lim) { const k = Math.sqrt(lim / r2); x *= k; y *= k; }
-    const d = { id: this.nextDrop++, x, y, v: Math.round(v * 100) / 100, r: foodRadius(v), col, coin: coin ? 1 : 0, age: 0, slot: -1, eaten: false };
+    const d = { id: this.nextDrop++, x, y, v: Math.round(v * 100) / 100, r: coin ? COIN_R : foodRadius(v), col, coin: coin ? 1 : 0, age: 0, slot: -1, eaten: false };
     this.drops.set(d.id, d); this.fAdd(d);
     this.events.push(coin ? ['d', d.id, Math.round(x), Math.round(y), d.v, col, 1] : ['d', d.id, Math.round(x), Math.round(y), d.v, col]);
   }
@@ -584,9 +584,9 @@ class Room {
   }
   // KashPay: um monte de moedas em volta da cabeça (quanto maior a minhoca, mais vale)
   kashDrop(w) {
-    const v = (180 + w.mass * .06) / KASH_COINS;
+    const v = 40 + w.mass * .015;   // cada moeda: 40 + 1,5% do tamanho (o monte vale ~960 + 36% do tamanho)
     for (let k = 0; k < KASH_COINS; k++) {
-      const a = Math.random() * TAU, d = 80 + Math.sqrt(Math.random()) * 280;
+      const a = Math.random() * TAU, d = 110 + Math.sqrt(Math.random()) * 330;
       this.addDrop(w.x + Math.cos(a) * d, w.y + Math.sin(a) * d, v, 'f5c518', true);
     }
   }
