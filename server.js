@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 13;
+const PROTO = 14;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -37,7 +37,8 @@ const ABIL = {
   laser: { skin: 'a8100c1a0507', cd: 2 },
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
-  grow:  { skin: 'a8100c1a0507', cd: 30 },                                  // 5: triplica de tamanho (até MAX_MASS)
+  grow:  { skin: 'a8100c1a0507', cd: 30 },
+  kash:  { skin: '34c4661f8a47f5c518', cd: 10 },                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
@@ -88,7 +89,8 @@ function banLeft(c) {
   return t;
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
-const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51';   // peles com poderes (grátis)
+const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
+const KASH_EAT = 1.5, KASH_COINS = 36;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
 function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
@@ -166,7 +168,7 @@ class Room {
     let og = ''; for (let i = 0; i < ORB_N; i++) og += enc2(this.orbGens[i]);
     const ob = []; for (let i = 0; i < ORB_N; i++) if (this.orbs[i].born > this.time) ob.push([i, +(this.orbs[i].born - this.time).toFixed(2)]);
     const worms = []; for (const w of this.worms.values()) worms.push([w.id, w.name, w.skin, encodePoly(w)]);
-    const drops = []; for (const d of this.drops.values()) drops.push([d.id, Math.round(d.x), Math.round(d.y), d.v, d.col]);
+    const drops = []; for (const d of this.drops.values()) drops.push([d.id, Math.round(d.x), Math.round(d.y), d.v, d.col, d.coin]);
     const fires = []; for (const f of this.fires.values()) fires.push([f.id, Math.round(f.x0), Math.round(f.y0), Math.round(f.x1), Math.round(f.y1), f.owner, +f.age.toFixed(2), f.blue]);
     c.send({ t: 'w', v: PROTO, room: this.name, mode: this.mode, seed: this.seed, me: c.id, k: this.tick, tickMs: TICK_MS, gens: gs, og, ob, worms, drops, fires });
   }
@@ -208,13 +210,13 @@ class Room {
   }
 
   /* ---------- comida ---------- */
-  addDrop(x, y, v, col) {
+  addDrop(x, y, v, col, coin) {
     if (this.drops.size >= MAX_DROPS) return;
     const r2 = x * x + y * y, lim = (WORLD_R - 20) ** 2;
     if (r2 > lim) { const k = Math.sqrt(lim / r2); x *= k; y *= k; }
-    const d = { id: this.nextDrop++, x, y, v: Math.round(v * 100) / 100, r: foodRadius(v), col, age: 0, slot: -1, eaten: false };
+    const d = { id: this.nextDrop++, x, y, v: Math.round(v * 100) / 100, r: foodRadius(v), col, coin: coin ? 1 : 0, age: 0, slot: -1, eaten: false };
     this.drops.set(d.id, d); this.fAdd(d);
-    this.events.push(['d', d.id, Math.round(x), Math.round(y), d.v, col]);
+    this.events.push(coin ? ['d', d.id, Math.round(x), Math.round(y), d.v, col, 1] : ['d', d.id, Math.round(x), Math.round(y), d.v, col]);
   }
   bodyDrops(w, pts, n, val) {
     const len = pts.length, rr = radiusOf(w.mass);
@@ -453,7 +455,8 @@ class Room {
   fDel(f) { const c = this.fgrid[f.cell], i = c.indexOf(f); if (i >= 0) { c[i] = c[c.length - 1]; c.pop(); } }
   eat(w) {
     if (!w.alive) return;
-    const r = radiusOf(w.mass), reach = r + 10, mag = w.powers.ima ? IMA_R : 0, dbl = w.powers.dobro ? 2 : 1;
+    const r = radiusOf(w.mass), reach = r + 10, mag = w.powers.ima ? IMA_R : 0;
+    const dbl = (w.powers.dobro ? 2 : 1) * (w.skin === KASH_SK && !this.classic ? KASH_EAT : 1);   // KashPay soma com o Dobro (3×)
     const R = Math.max(reach + 16, mag + 16);
     const x0 = this.fCell(w.x - R), x1 = this.fCell(w.x + R), y0 = this.fCell(w.y - R), y1 = this.fCell(w.y + R);
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
@@ -574,9 +577,18 @@ class Room {
     if (k === 'laser') this.fireLaser(w);
     else if (k === 'fogo') this.spawnFire(w, true);
     else if (k === 'grow') { if (w.mass >= MAX_MASS) return false; w.mass = Math.min(MAX_MASS, w.mass * 3); }
+    else if (k === 'kash') this.kashDrop(w);
     else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
     w.cds[k] = A.cd;
     return true;
+  }
+  // KashPay: um monte de moedas em volta da cabeça (quanto maior a minhoca, mais vale)
+  kashDrop(w) {
+    const v = (180 + w.mass * .06) / KASH_COINS;
+    for (let k = 0; k < KASH_COINS; k++) {
+      const a = Math.random() * TAU, d = 80 + Math.sqrt(Math.random()) * 280;
+      this.addDrop(w.x + Math.cos(a) * d, w.y + Math.sin(a) * d, v, 'f5c518', true);
+    }
   }
   fireLaser(w) {
     const c = Math.cos(w.angle), s = Math.sin(w.angle), r = radiusOf(w.mass);
@@ -781,6 +793,7 @@ class Client {
         if (DEV && this.worm && num(m.a)) { this.worm.angle = this.worm.target = m.a; }
         if (DEV && this.worm && num(m.mass)) this.worm.mass = clamp(m.mass, 14, 5000);
         if (DEV && num(m.born) && this.worm) this.worm.born = this.room.time - m.born;
+        if (DEV && num(m.drop) && this.worm && this.room) this.room.addDrop(this.worm.x, this.worm.y, clamp(m.drop, 1, 1e6), 'ffffff');
         break;
     }
   }
