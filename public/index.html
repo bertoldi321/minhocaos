@@ -227,6 +227,22 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .mcount{font-size:11.5px;font-weight:600;color:var(--ink-dim);opacity:.8}
 .mode[aria-checked="true"]{border-color:var(--clay);background:rgba(255,138,61,.13);color:var(--ink)}
 .mode.classic b{color:#8dff9a}
+.modes{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:520px){.modes{grid-template-columns:minmax(0,1fr)}}
+.mode.royale b{color:#ff6a4a}
+.mode.royale[aria-checked="true"]{border-color:#ff6a4a;background:rgba(255,106,74,.12)}
+.br-box{display:grid;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.22);border:1px solid rgba(255,106,74,.35)}
+.br-status{margin:0;font-size:14px;line-height:1.45}
+.br-status b{color:#ffb39e}
+.br-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:200px;overflow-y:auto}
+.br-list li{display:grid;grid-template-columns:12px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:14px}
+.br-list li i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.br-list li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br-list li b{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+.br-list li.ok b{color:#8dff9a}
+.br-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.br-ready.on{background:#8dff9a;box-shadow:0 5px 0 #3f8f5a}
+.br-start{border:0;border-radius:14px;background:#b3110d;color:#fff3ee;font-weight:700;padding:0 16px;box-shadow:0 5px 0 #5e0807}
 .mode.classic[aria-checked="true"]{border-color:#8dff9a;background:rgba(141,255,154,.1)}
 #toasts{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 18px);transform:translateX(-50%);width:min(380px,calc(100% - 32px));display:grid;gap:6px;justify-items:center;z-index:6;pointer-events:none}
 .toast{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 11px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:14px;font-weight:500;animation:tin .25s ease-out,tout .45s ease-in 2.2s forwards;max-width:100%}
@@ -325,6 +341,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
         <div class="modes" role="radiogroup" aria-labelledby="modeLbl">
           <button type="button" class="mode" id="mode-poderes" role="radio" aria-checked="true"><b>Poderes</b><small>Esferas de poder no mapa e peles com poderes.</small><span class="mcount"></span></button>
           <button type="button" class="mode classic" id="mode-normal" role="radio" aria-checked="false"><b>Normal</b><small>Sem poderes: só comer, crescer e cercar.</small><span class="mcount"></span></button>
+          <button type="button" class="mode royale" id="mode-br" role="radio" aria-checked="false"><b>Battle Royale</b><small>Todos entram juntos, o fogo fecha, o último vivo vence.</small><span class="mcount"></span></button>
         </div>
         <span class="lbl" id="skinLbl">Pele</span>
         <div class="skins" id="skins" role="radiogroup" aria-labelledby="skinLbl"></div>
@@ -344,6 +361,11 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
             <button class="room-btn" id="copyLink" type="button">Copiar link</button>
             <input id="roomLink" readonly hidden aria-label="Link da sala">
           </div>
+        </div>
+        <div class="br-box" id="brBox" hidden>
+          <p class="br-status" id="brStatus"></p>
+          <ul class="br-list" id="brList"></ul>
+          <div class="br-actions"><button type="button" class="play br-ready" id="brReady">Ready</button><button type="button" class="br-start" id="brStart" hidden>Start (Demônio)</button></div>
         </div>
         <button class="play" id="playBtn" type="submit">Jogar</button>
         <p class="keys" id="keysHint"></p>
@@ -393,7 +415,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 14;
+const PROTO = 15;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -429,7 +451,8 @@ const ABIL_UI = {
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
-let orbWts = ORB_WEIGHTS, classic = false;   // classic: modo Normal, sem esferas nem poderes de pele
+let orbWts = ORB_WEIGHTS, classic = false, zoneR = WORLD_R;   // zoneR: borda de fogo (fecha no Battle Royale)
+let brOn = false, br = { phase: 'lobby', ready: [], n: 0, need: 1, alive: 0, win: '' }, iAmReady = false;   // classic: modo Normal, sem esferas nem poderes de pele
 function orbType(r) { let x = r * 100; for (const [k, w] of orbWts) { x -= w; if (x < 0) return k; } return 'ima'; }
 // velocidade de uma minhoca (igual à conta do servidor); sf = multiplicador acumulado do modo Turbo
 function spdOf(f, boost, sup, sf) { return (f & PBIT.turbo ? TURBO_SPEED : sup ? DEMON_SPEED : boost ? BOOST_SPEED : BASE_SPEED) * (sf || 1) * (f & (F_FROZEN | PBIT.lento) ? SLOW : 1); }
@@ -789,11 +812,11 @@ function updateFires(dt) {
 }
 function borderEmbers(dt) {
   const d = Math.hypot(cam.x, cam.y), view = Math.max(vx1 - vx0, vy1 - vy0);
-  if (d + view < WORLD_R - 60 || parts.length > 520) return;
+  if (d + view < zoneR - 60 || parts.length > 520) return;
   const n = Math.random() < dt * 40 ? 1 : 0;
   for (let k = 0; k < n; k++) {
-    const a = Math.atan2(cam.y, cam.x) + (Math.random() - .5) * view / WORLD_R * 1.4, c = Math.cos(a), s2 = Math.sin(a), sp = rand(30, 90);
-    const x = c * (WORLD_R + 10), y = s2 * (WORLD_R + 10);
+    const a = Math.atan2(cam.y, cam.x) + (Math.random() - .5) * view / zoneR * 1.4, c = Math.cos(a), s2 = Math.sin(a), sp = rand(30, 90);
+    const x = c * (zoneR + 10), y = s2 * (zoneR + 10);
     if (!inView(x, y, 40)) continue;
     parts.push({ x, y, vx: -c * sp + (Math.random() - .5) * 30, vy: -s2 * sp + (Math.random() - .5) * 30, life: rand(.9, 1.6), max: 1.6, col: Math.random() < .5 ? '#ffb347' : '#ff6a2a', size: rand(3, 6) });
   }
@@ -931,7 +954,7 @@ function placeWorm(w, rt) {
 /* ================= mensagens do servidor ================= */
 function onWelcome(m) {
   chatEl.log.innerHTML = ''; chatEl.empty.hidden = false;   // trocou de toca: o chat é outro
-  classic = m.mode === 'classico';
+  classic = m.mode === 'classico'; brOn = m.mode === 'br'; zoneR = WORLD_R; iAmReady = false; setTimeout(renderBr, 0);
   seed = m.seed | 0 || 1; tickMs = m.tickMs || 25; meId = m.me;
   for (const w of [...worms.values()]) dropWorm(w);
   myWormId = 0; me = null; myPowers = {};
@@ -947,6 +970,7 @@ function onWelcome(m) {
   renderLobby(true);
 }
 function onSnapshot(m) {
+  if (m.z) zoneR = m.z;
   const now = performance.now(), t = m.k * tickMs, sample = now - t;
   off = off === undefined ? sample : Math.min(off + (now - offT) * .005, sample); offT = now;
   const map = new Map();
@@ -995,6 +1019,7 @@ function applyEvent(e) {
     case 'k': {
       const v = worms.get(e[1]), k = e[2] ? worms.get(e[2]) : null;
       if (!v) break;
+      if (e[3] === 'round') { dropWorm(v); break; }   // fim da rodada do Battle Royale
       if (window.__mh) {
         let gap = null;
         if (k) {
@@ -1036,7 +1061,7 @@ function onMessage(m) {
     case 'w': onWelcome(m); break;
     case 's': onSnapshot(m); break;
     case 'you': myWormId = m.w; { const w = worms.get(m.w); if (w) { w.isMe = true; me = w; } } startPlaying(); break;
-    case 'r': roster = Array.isArray(m.p) ? m.p : []; roomN = m.n && typeof m.n === 'object' ? m.n : roomN; renderLobby(); renderModes(); break;
+    case 'r': roster = Array.isArray(m.p) ? m.p : []; roomN = m.n && typeof m.n === 'object' ? m.n : roomN; renderLobby(); renderModes(); renderBr(); break;
     case 'b': for (const q of m.w || []) { const w = worms.get(q[0]); if (w) w.pendingPoly = q[1]; } break;
     case 'p': { const r = performance.now() - m.c; rttAvg = rttAvg ? rttAvg * .6 + r * .4 : r; rtt = Math.round(rttAvg); break; }
     case 'old': conn = 'old'; renderLobby(true); break;
@@ -1045,6 +1070,7 @@ function onMessage(m) {
     case 'demon': setDemonState(m); break;
     case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = performance.now() + (+m.s || ABIL_UI[m.k].cd) * 1000; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
     case 'chat': addChat(m); break;
+    case 'br': onBr(m); break;
     case 'chatlog': chatEl.log.innerHTML = ''; for (const q of Array.isArray(m.l) ? m.l : []) addChat(q, true); break;
     case 'pups': toast(`<b>${m.n | 0} ${m.n === 1 ? 'filhote nasceu' : 'filhotes nasceram'}</b>: eles não te machucam`, '#1fa1cd'); sfx('power'); break;
   }
@@ -1053,13 +1079,14 @@ function onMessage(m) {
 /* ================= conexão ================= */
 let ws = null, conn = 'connecting', retry = 0, pingT = 0;
 // duas tocas: normal e modo Turbo (cada Turbo soma velocidade até a minhoca morrer)
-const MODE_Q = /[?&]modo=(poderes|normal)\b/.exec(location.search);
+const MODE_Q = /[?&]modo=(poderes|normal|br)\b/.exec(location.search);
 // duas tocas: 'poderes' (o jogo com tudo) e 'normal' (clássico, sem poderes)
-let mode = MODE_Q ? MODE_Q[1] : store.get('minhocaos.mode2', 'poderes') === 'normal' ? 'normal' : 'poderes';
-let roomName = mode === 'normal' ? 'normal' : 'geral', roomN = {};
+let mode = MODE_Q ? MODE_Q[1] : ['normal', 'br'].includes(store.get('minhocaos.mode2', '')) ? store.get('minhocaos.mode2', '') : 'poderes';
+const roomOf = m => m === 'normal' || m === 'br' ? m : 'geral';
+let roomName = roomOf(mode), roomN = {};
 function setMode(m) {
   if (m === mode) return;
-  mode = m; roomName = m === 'normal' ? 'normal' : 'geral'; store.set('minhocaos.mode2', m);
+  mode = m; roomName = roomOf(m); store.set('minhocaos.mode2', m);
   renderModes();
   const s = ws; ws = null; roster = [];
   if (s) { try { s.close(); } catch (e) {} }
@@ -1544,13 +1571,13 @@ function drawWorm(w) {
 }
 function drawFireWall() {
   const d = Math.hypot(cam.x, cam.y), view = Math.hypot(vx1 - vx0, vy1 - vy0) / 2;
-  if (d + view < WORLD_R - 160) return;
+  if (d + view < zoneR - 160) return;
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(0, 0, WORLD_R - 170, 0, 0, WORLD_R + 30);
+  const g = ctx.createRadialGradient(0, 0, zoneR - 170, 0, 0, zoneR + 30);
   g.addColorStop(0, 'rgba(255,70,20,0)'); g.addColorStop(.6, 'rgba(255,80,20,.16)'); g.addColorStop(1, 'rgba(255,140,40,.45)');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, WORLD_R + 30, 0, TAU); ctx.arc(0, 0, WORLD_R - 170, 0, TAU, true); ctx.fill();
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, zoneR + 30, 0, TAU); ctx.arc(0, 0, zoneR - 170, 0, TAU, true); ctx.fill();
   for (let layer = 0; layer < 2; layer++) {
-    const spr = layer ? FLAME_IN : FLAME_OUT, rad = WORLD_R + (layer ? 18 : 40);
+    const spr = layer ? FLAME_IN : FLAME_OUT, rad = zoneR + (layer ? 18 : 40);
     ctx.globalAlpha = layer ? .95 : .9;
     for (let i = 0; i < WALL_N; i++) {
       const bx = WALL_C[i] * rad, by = WALL_S[i] * rad;
@@ -1567,7 +1594,7 @@ function drawFireWall() {
   }
   ctx.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (W / 2 - cam.x * cam.z), DPR * (H / 2 - cam.y * cam.z));
   ctx.globalAlpha = 1;
-  ctx.beginPath(); ctx.arc(0, 0, WORLD_R, 0, TAU);
+  ctx.beginPath(); ctx.arc(0, 0, zoneR, 0, TAU);
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,190,90,.85)'; ctx.stroke();
   ctx.globalCompositeOperation = 'source-over';
 }
@@ -1614,7 +1641,7 @@ function render() {
 
   ctx.fillStyle = ground; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
   ctx.beginPath(); ctx.rect(vx0 - 10, vy0 - 10, vx1 - vx0 + 20, vy1 - vy0 + 20);
-  ctx.moveTo(WORLD_R, 0); ctx.arc(0, 0, WORLD_R, 0, TAU);
+  ctx.moveTo(zoneR, 0); ctx.arc(0, 0, zoneR, 0, TAU);
   ctx.fillStyle = 'rgba(30,7,4,.88)'; ctx.fill('evenodd');
   drawFireWall();
 
@@ -1754,6 +1781,7 @@ function drawMinimap() {
   mctx.clearRect(0, 0, S, S);
   mctx.fillStyle = 'rgba(29,19,34,.92)'; mctx.beginPath(); mctx.arc(c, c, S / 2 - 2, 0, TAU); mctx.fill();
   mctx.strokeStyle = 'rgba(255,120,40,.85)'; mctx.lineWidth = 2 * DPR; mctx.stroke();
+  if (zoneR < WORLD_R - 5) { mctx.strokeStyle = '#ff3b1a'; mctx.lineWidth = 2 * DPR; mctx.beginPath(); mctx.arc(c, c, zoneR * sc, 0, TAU); mctx.stroke(); }   // borda que está fechando
   if (me && me.alive && me.powers.cego) return;   // cego também não vê o minimapa
   mctx.fillStyle = '#ff4a2a';
   for (const f of fires.values()) { mctx.beginPath(); mctx.arc(c + f.x * sc, c + f.y * sc, 1.6 * DPR, 0, TAU); mctx.fill(); }
@@ -1829,7 +1857,7 @@ function updateBoard() {
   el.board.innerHTML = html;
   if (me && me.alive) {
     el.len.textContent = fmt(me.mass);
-    el.rank.textContent = `${myRank > 0 ? myRank : '–'}º de ${alive.length} · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}`;
+    el.rank.textContent = brOn ? `Battle Royale · ${br.alive || alive.length} vivos · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}` : `${myRank > 0 ? myRank : '–'}º de ${alive.length} · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}`;
     if (myRank > 0) stats.bestRank = Math.min(stats.bestRank, myRank);
     if (myRank === 1 && lastRank !== 1 && alive.length > 1 && time - kingT > 8) { kingT = time; flash('Native King', '#ffd23f'); }
     lastRank = myRank;
@@ -1860,7 +1888,7 @@ function renderLobby(force) {
     text = `Online · ${others.length} ${others.length === 1 ? 'amigo' : 'amigos'} na toca`;
     chips = others.map(p => `<li style="--c:#${/^[0-9a-f]{6}$/i.test(p[2]) ? p[2] : 'ff8a3d'}"><i></i><span>${esc(cleanName(p[1]))}</span><small>${p[3] ? 'jogando' : 'no menu'}</small></li>`).join('');
   }
-  const roomTxt = mode === 'normal' ? 'Toca do <b>modo Normal</b> (sem poderes)' : 'Toca do <b>modo Poderes</b>';
+  const roomTxt = mode === 'normal' ? 'Toca do <b>modo Normal</b> (sem poderes)' : mode === 'br' ? 'Sala do <b>Battle Royale</b>' : 'Toca do <b>modo Poderes</b>';
   const key = dotCls + '|' + text + '|' + note + '|' + chips + '|' + roomTxt;
   el.playBtn.disabled = conn !== 'online';
   if (!force && key === lobbyKey) return;
@@ -1871,7 +1899,7 @@ function renderLobby(force) {
   el.roomRow.hidden = false; el.roomName.innerHTML = roomTxt;
 }
 function roomLink() {
-  try { const u = new URL(location.href.split('#')[0]); u.searchParams.delete('debug'); if (mode === 'normal') u.searchParams.set('modo', 'normal'); else u.searchParams.delete('modo'); return u.toString(); }
+  try { const u = new URL(location.href.split('#')[0]); u.searchParams.delete('debug'); if (mode !== 'poderes') u.searchParams.set('modo', mode); else u.searchParams.delete('modo'); return u.toString(); }
   catch (e) { return location.href.split('#')[0]; }
 }
 
@@ -1884,6 +1912,7 @@ function toggleSound() {
 }
 function requestPlay() {
   ensureAudio();
+  if (brOn) { toggleReady(); return; }
   if (skinIdx === DEMON_IDX && demonBanLeft() > 0) { selectSkin(0); toast(`Pele <b>Demônio</b> volta em ${mmss(demonBanLeft())}`, '#ff3b1a'); }
   store.set('minhocaos.name', el.name.value.trim());
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
@@ -1966,7 +1995,7 @@ const LOCK_SVG = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><path
 function selectSkin(i) {
   skinIdx = i; store.set('minhocaos.skin2', skinStr(SKINS[i].c));
   for (const x of document.querySelectorAll('.skin')) x.setAttribute('aria-checked', String(x.id === 'skin-' + i));
-  sendName(); if (typeof updateKeysHint === 'function') updateKeysHint();
+  sendName(); if (typeof updateKeysHint === 'function') updateKeysHint(); if (typeof renderBr === 'function') renderBr();
 }
 function demonLabel() {
   const b = $('#skin-' + DEMON_IDX); if (!b) return;
@@ -2053,14 +2082,50 @@ function updateKeysHint() {
 }
 updateKeysHint();
 function renderModes() {
-  for (const m of ['poderes', 'normal']) {
+  for (const m of ['poderes', 'normal', 'br']) {
     const b = $('#mode-' + m); if (!b) continue;
     b.setAttribute('aria-checked', String(m === mode));
-    const n = roomN[m === 'normal' ? 'normal' : 'geral'] || 0;
+    const n = roomN[roomOf(m)] || 0;
     b.querySelector('.mcount').textContent = n ? `${n} na toca` : 'ninguém na toca';
   }
 }
-for (const m of ['poderes', 'normal']) $('#mode-' + m).addEventListener('click', () => setMode(m));
+for (const m of ['poderes', 'normal', 'br']) $('#mode-' + m).addEventListener('click', () => setMode(m));
+/* ================= Battle Royale: sala de espera ================= */
+const brEl = { box: $('#brBox'), status: $('#brStatus'), list: $('#brList'), ready: $('#brReady'), start: $('#brStart') };
+function canStartBr() { return SKINS[skinIdx].lock && demonPw && !(demonTier === 'limited' && demonBanLeft() > 0); }
+function toggleReady() {
+  if (conn !== 'online' || !brOn || br.phase !== 'lobby') return;
+  iAmReady = !iAmReady;
+  send(Object.assign({ t: 'ready', on: iAmReady }, look()));
+  renderBr();
+}
+function onBr(m) {
+  const prev = br.phase;
+  br = { phase: m.phase, ready: Array.isArray(m.ready) ? m.ready : [], n: m.n | 0, need: m.need | 0, alive: m.alive | 0, win: m.win || '' };
+  iAmReady = br.ready.includes(meId);
+  if (prev !== 'play' && br.phase === 'play') { sfx('power'); flash('Valendo!', '#ffd23f'); }
+  if (br.phase === 'end' && prev !== 'end') { flash(br.win ? `${br.win} venceu!` : 'Ninguém sobrou', '#ffd23f'); if (br.win && me && me.alive) toast('<b>Você venceu</b> o Battle Royale!', '#ffd23f'); }
+  if (br.phase === 'lobby' && prev !== 'lobby' && state !== 'menu') showMenu();
+  renderBr();
+}
+function renderBr() {
+  brEl.box.hidden = !brOn; el.playBtn.hidden = brOn;
+  if (!brOn) return;
+  const rs = new Set(br.ready);
+  brEl.list.innerHTML = roster.map(p => `<li class="${rs.has(p[0]) ? 'ok' : ''}"><i style="--c:#${/^[0-9a-f]{6}$/i.test(p[2]) ? p[2] : 'ff8a3d'}"></i><span>${esc(cleanName(p[1]))}${p[0] === meId ? ' (você)' : ''}</span><b>${rs.has(p[0]) ? 'pronto' : br.phase === 'lobby' ? 'esperando' : p[3] ? 'jogando' : 'assistindo'}</b></li>`).join('');
+  if (br.phase === 'lobby') {
+    brEl.status.innerHTML = `Começa quando <b>metade</b> estiver pronta: <b>${br.ready.length}/${br.need}</b> de ${br.n} na sala.`;
+    brEl.ready.hidden = false; brEl.ready.textContent = iAmReady ? 'Cancelar Ready' : 'Ready'; brEl.ready.classList.toggle('on', iAmReady);
+    brEl.ready.disabled = conn !== 'online';
+    brEl.start.hidden = !canStartBr();
+  } else {
+    brEl.status.innerHTML = br.phase === 'play' ? `Partida em andamento: <b>${br.alive}</b> vivos. Você entra na próxima rodada.` : `Fim da rodada${br.win ? `: <b>${esc(br.win)}</b> venceu` : ''}. A sala de espera abre em instantes.`;
+    brEl.ready.hidden = true; brEl.start.hidden = true;
+  }
+}
+brEl.ready.addEventListener('click', toggleReady);
+brEl.start.addEventListener('click', () => { if (conn === 'online' && brOn && br.phase === 'lobby' && canStartBr()) send(Object.assign({ t: 'start' }, look())); });
+
 /* ================= chat da toca ================= */
 const chatEl = { btn: $('#chatBtn'), panel: $('#chatPanel'), log: $('#chatLog'), form: $('#chatForm'), inp: $('#chatIn'), badge: $('#chatBadge'), peek: $('#chatPeek'), close: $('#chatClose'), empty: $('#chatEmpty') };
 let chatOpen = false, chatUnread = 0;
@@ -2123,7 +2188,7 @@ el.name.value = store.get('minhocaos.name', '');
 el.name.addEventListener('input', sendName);
 el.soundBtn.textContent = muted ? 'Som desligado' : 'Som ligado';
 $('#startForm').addEventListener('submit', e => { e.preventDefault(); requestPlay(); });
-$('#againBtn').addEventListener('click', requestPlay);
+$('#againBtn').addEventListener('click', () => { if (brOn) showMenu(); else requestPlay(); });
 $('#menuBtn').addEventListener('click', showMenu);
 el.soundBtn.addEventListener('click', toggleSound);
 el.copyLink.addEventListener('click', () => {

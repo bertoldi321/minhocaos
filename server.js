@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 14;
+const PROTO = 15;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -94,7 +94,9 @@ const KASH_EAT = 1.5, KASH_COINS = 24, COIN_R = 26;   // KashPay: tudo o que com
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
 function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
-function cleanRoom(r) { return r === 'normal' ? 'normal' : 'geral'; }   // duas tocas: 'geral' (com poderes) e 'normal' (clássico, sem poderes)
+function cleanRoom(r) { return r === 'normal' || r === 'br' ? r : 'geral'; }
+// Battle Royale: sala de espera, Ready, ninguém renasce, a borda de fogo fecha e o último vivo vence
+const BR_GRACE = 20, BR_SHRINK = 15, BR_MIN_R = 450, BR_END = 8;   // duas tocas: 'geral' (com poderes) e 'normal' (clássico, sem poderes)
 const num = v => typeof v === 'number' && isFinite(v);
 
 /* mesmas fórmulas do cliente: posição e valor de cada bolinha e de cada esfera saem da semente da sala */
@@ -127,7 +129,8 @@ function flagsOf(w) {
 class Room {
   constructor(name) {
     this.name = name;
-    this.mode = name === 'normal' ? 'classico' : 'poderes'; this.classic = this.mode === 'classico'; this.weights = ORB_WEIGHTS;
+    this.mode = name === 'normal' ? 'classico' : name === 'br' ? 'br' : 'poderes'; this.classic = this.mode === 'classico'; this.weights = ORB_WEIGHTS;
+    this.br = this.mode === 'br'; this.zoneR = WORLD_R; this.phase = 'lobby'; this.ready = new Set(); this.brT = 0; this.brStart = 0; this.brWin = '';
     this.seed = crypto.randomInt(1, 2 ** 31 - 1);
     this.time = 0; this.tick = 0;
     this.clients = new Set();
@@ -155,6 +158,7 @@ class Room {
     this.sendWelcome(c);
     if (this.chat.length) c.send({ t: 'chatlog', l: this.chat });
     rosterAll();
+    if (this.br) this.brState();
   }
   leave(c) {
     if (c.worm && c.worm.alive) this.kill(c.worm, null, 'left');
@@ -162,6 +166,36 @@ class Room {
     this.clients.delete(c); c.room = null;
     if (!this.clients.size) this.emptySince = Date.now();
     rosterAll();
+    if (this.br) { this.ready.delete(c.id); this.brState(); this.brCheck(); }
+  }
+  /* ---------- Battle Royale ---------- */
+  brState(extra) {
+    const msg = JSON.stringify(Object.assign({ t: 'br', phase: this.phase, ready: [...this.ready], n: this.clients.size,
+      need: Math.max(1, Math.ceil(this.clients.size * .5)), alive: this.brAlive().length, win: this.brWin }, extra));
+    for (const c of this.clients) c.sendText(msg);
+  }
+  brAlive() { const a = []; for (const w of this.worms.values()) if (w.alive && w.client) a.push(w); return a; }
+  brCheck() { if (this.phase === 'lobby' && this.clients.size && this.ready.size >= Math.ceil(this.clients.size * .5)) this.brStartMatch(); }
+  brStartMatch() {
+    this.phase = 'play'; this.brT = 0; this.zoneR = WORLD_R; this.ready.clear(); this.brWin = '';
+    for (const c of this.clients) if (!c.worm || !c.worm.alive) this.spawn(c);
+    this.brStart = this.brAlive().length;
+    this.brState();
+  }
+  brTick(dt) {
+    if (this.phase === 'play') {
+      this.brT += dt;
+      if (this.brT > BR_GRACE) this.zoneR = Math.max(BR_MIN_R, WORLD_R - (this.brT - BR_GRACE) * BR_SHRINK);
+      const alive = this.brAlive();
+      if (alive.length <= (this.brStart > 1 ? 1 : 0)) {
+        this.phase = 'end'; this.brT = BR_END; this.brWin = alive[0] ? alive[0].name : '';
+        this.brState();
+      }
+    } else if (this.phase === 'end' && (this.brT -= dt) <= 0) {
+      for (const w of this.worms.values()) if (w.alive) { w.alive = false; this.events.push(['k', w.id, 0, 'round']); }   // fim da rodada: tira todo mundo sem soltar comida
+      this.phase = 'lobby'; this.zoneR = WORLD_R; this.brWin = '';
+      this.brState();
+    }
   }
   sendWelcome(c) {
     let gs = ''; for (let i = 0; i < FOOD_N; i++) gs += enc2(this.gens[i]);
@@ -294,7 +328,8 @@ class Room {
       }
     }
     if (this.bot && this.bot.alive) this.botThink(this.bot, list);
-    else if (this.clients.size && (this.botT -= dt) <= 0) this.spawnBot();
+    else if (!this.br && this.clients.size && (this.botT -= dt) <= 0) this.spawnBot();
+    if (this.br) this.brTick(dt);
     if (this.tick % SEND_EVERY === 0) this.broadcast();
   }
 
@@ -499,7 +534,7 @@ class Room {
     const ev = [];
     for (let wi = 0; wi < list.length; wi++) {
       const w = list[wi]; if (!w.alive) continue;
-      const r = radiusOf(w.mass), lim = WORLD_R - r * .4;
+      const r = radiusOf(w.mass), lim = this.zoneR - r * .4;
       if (w.x * w.x + w.y * w.y > lim * lim) { ev.push({ k: 'die', v: w, by: null, c: 'wall' }); continue; }
       const saw = !!w.powers.serra || !!w.sawOn, hr = r * .82, R = hr + this.maxR;
       let burnt = null;
@@ -616,7 +651,7 @@ class Room {
       if (exact) e.push(Math.round(x.lastSpd));
       w.push(e);
     }
-    const msg = JSON.stringify({ t: 's', k: this.tick, w, e: this.events });
+    const msg = JSON.stringify(this.br ? { t: 's', k: this.tick, w, e: this.events, z: Math.round(this.zoneR) } : { t: 's', k: this.tick, w, e: this.events });
     this.events = [];
     for (const c of this.clients) c.sendText(msg);
   }
@@ -770,8 +805,20 @@ class Client {
         this.send({ t: 'senha', ok: !!ok, tier: this.demon || '', ban: this.demon === 'limited' ? Math.ceil(banLeft(this) / 1000) : 0 });
         break;
       }
+      case 'ready':
+        if (!this.room || !this.room.br || this.room.phase !== 'lobby') return;
+        this.look(m);
+        if (m.on) this.room.ready.add(this.id); else this.room.ready.delete(this.id);
+        this.room.brState(); this.room.brCheck();
+        break;
+      case 'start':   // a minhoca Demônio pode começar a partida na hora
+        if (!this.room || !this.room.br || this.room.phase !== 'lobby') return;
+        this.look(m);
+        if (this.skin === DEMON_SK) this.room.brStartMatch();
+        break;
       case 'play':
         if (!this.room || (this.worm && this.worm.alive)) return;
+        if (this.room.br) return;                       // no Battle Royale todo mundo entra junto, pelo Ready
         this.look(m);
         this.room.spawn(this);
         break;
