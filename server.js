@@ -38,7 +38,7 @@ const ABIL = {
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
   grow:  { skin: 'a8100c1a0507', cd: 30 },
-  kash:  { skin: '34c4661f8a47f5c518', cd: 10 },                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
+  kash:  { skin: '34c4661f8a47f5c518', cd: 18 },                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
@@ -90,7 +90,7 @@ function banLeft(c) {
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
-const KASH_EAT = 1.5, KASH_COINS = 24, COIN_R = 26;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
+const KASH_EAT = 1.5, KASH_COINS = 20, COIN_R = 20;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
 function cleanChat(s) { return typeof s === 'string' ? s.replace(NAME_JUNK, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX) : ''; }
@@ -619,7 +619,7 @@ class Room {
   }
   // KashPay: um monte de moedas em volta da cabeça (quanto maior a minhoca, mais vale)
   kashDrop(w) {
-    const v = 40 + w.mass * .015;   // cada moeda: 40 + 1,5% do tamanho (o monte vale ~960 + 36% do tamanho)
+    const v = 28 + w.mass * .008;   // cada moeda: 28 + 0,8% do tamanho (o monte vale ~560 + 16% do tamanho)
     for (let k = 0; k < KASH_COINS; k++) {
       const a = Math.random() * TAU, d = 110 + Math.sqrt(Math.random()) * 330;
       this.addDrop(w.x + Math.cos(a) * d, w.y + Math.sin(a) * d, v, 'f5c518', true);

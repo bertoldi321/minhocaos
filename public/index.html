@@ -447,7 +447,7 @@ const ABIL_UI = {
   fogo:  { key: '3',     name: 'Fogo azul',   icon: 'fogo',   col: '#3aa8ff', cd: 4 },
   boost: { key: '4',     name: 'Boost 3×',    icon: 'turbo',  col: '#ff6a3a', cd: 4 },
   grow:  { key: '5',     name: 'Triplicar',   icon: 'cresce', col: '#ff3b1a', cd: 30 },
-  kash:  { key: 'Shift', name: 'Moedas',      icon: 'coin',   col: '#34c466', cd: 10 },
+  kash:  { key: 'Shift', name: 'Moedas',      icon: 'coin',   col: '#34c466', cd: 18 },
 };
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const SLOW = .42, FB_R = 22, FB_TTL = 10, FB_FLY = .5;
@@ -770,7 +770,7 @@ function addDrop(id, x, y, v, col, pop, coin) {
   if (drops.has(id) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(v)) return;
   const R = rng(id, 77), c = /^[0-9a-f]{6}$/i.test(col) ? '#' + col : '#ffe9d6';
   const f = mkFood(x, y, v, c, R() * TAU, coin ? 3 : (R() * 3) | 0);   // 3 = moeda da KashPay
-  if (coin) f.r = 26;   // moeda grande da KashPay
+  if (coin) f.r = 20;   // moeda grande da KashPay
   f.id = id; f.pop = pop ? 0 : 1; drops.set(id, f); foods.push(f);
 }
 function endDrop(id, eater) {
@@ -2071,7 +2071,7 @@ function updateKeysHint() {
     ? (coarse ? 'os botões à esquerda soltam serra, laser, fogo azul, boost 3× e triplicar; o amarelo vira o turbo do demônio.'
               : '<kbd>Espaço</kbd> serra · <kbd>Shift</kbd> turbo · <kbd>1</kbd> laser · <kbd>3</kbd> fogo azul · <kbd>4</kbd> boost 3× · <kbd>5</kbd> triplicar')
     : sel.logo === 'vt' ? 'anda 1,5× mais rápido e acelera 3× mais rápido que os outros.'
-    : sel.logo === 'kp' ? (coarse ? 'o botão à esquerda solta um monte de moedas; tudo o que come vale 1,5×.' : '<kbd>Shift</kbd> solta um monte de moedas (recarga de 10 s) · tudo o que come vale 1,5×')
+    : sel.logo === 'kp' ? (coarse ? 'o botão à esquerda solta um monte de moedas; tudo o que come vale 1,5×.' : '<kbd>Shift</kbd> solta um monte de moedas (recarga de 18 s) · tudo o que come vale 1,5×')
     : sel.logo === 'da' ? 'a cada 1.000 pontos nascem 2 filhotes que te ajudam.' : '';
   const name = demon ? 'Demônio' : sel.name;
   $('#keysHint').innerHTML = (coarse
