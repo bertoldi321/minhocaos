@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 15;
+const PROTO = 16;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -38,7 +38,8 @@ const ABIL = {
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
   grow:  { skin: 'a8100c1a0507', cd: 30 },
-  kash:  { skin: '34c4661f8a47f5c518', cd: 18 },                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
+  kash:  { skin: '34c4661f8a47f5c518', cd: 18 },
+  slash: { skin: '141416d9d9d6', cd: 6 },                                   // Slash: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
@@ -90,6 +91,7 @@ function banLeft(c) {
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
+const SLASH_SK = '141416d9d9d6', SLASH_CUT = .2;   // Slash: laser que tira 20% do tamanho de quem acerta
 const KASH_EAT = 1.5, KASH_COINS = 20, COIN_R = 20;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
@@ -613,6 +615,7 @@ class Room {
     else if (k === 'fogo') this.spawnFire(w, true);
     else if (k === 'grow') { if (w.mass >= MAX_MASS) return false; w.mass = Math.min(MAX_MASS, w.mass * 3); }
     else if (k === 'kash') this.kashDrop(w);
+    else if (k === 'slash') this.fireLaser(w, true);
     else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
     w.cds[k] = A.cd;
     return true;
@@ -625,7 +628,7 @@ class Room {
       this.addDrop(w.x + Math.cos(a) * d, w.y + Math.sin(a) * d, v, 'f5c518', true);
     }
   }
-  fireLaser(w) {
+  fireLaser(w, slash) {
     const c = Math.cos(w.angle), s = Math.sin(w.angle), r = radiusOf(w.mass);
     const x0 = w.x + c * r, y0 = w.y + s * r;
     let len = LASER_LEN;
@@ -639,8 +642,14 @@ class Room {
       if (near(o.x, o.y)) { hits.push([o, 0]); continue; }
       for (let i = 0; i < o.pts.length; i++) if (near(o.pts[i].x, o.pts[i].y)) { hits.push([o, i + 1]); break; }
     }
-    this.events.push(['L', w.id, Math.round(x0), Math.round(y0), Math.round(x0 + c * len), Math.round(y0 + s * len)]);
-    for (const [o, i] of hits) { if (!o.alive) continue; if (i <= 2) this.kill(o, w, 'laser'); else this.cut(o, i, w, 'laser'); }
+    this.events.push(['L', w.id, Math.round(x0), Math.round(y0), Math.round(x0 + c * len), Math.round(y0 + s * len), slash ? 1 : 0]);
+    for (const [o, i] of hits) {
+      if (!o.alive) continue;
+      if (slash) {   // Slash: não mata, encolhe 20% e a tela de quem foi atingido pisca em vermelho
+        o.mass = Math.max(14, o.mass * (1 - SLASH_CUT));
+        if (o.client) o.client.send({ t: 'slashed', by: w.name });
+      } else if (i <= 2) this.kill(o, w, 'laser'); else this.cut(o, i, w, 'laser');
+    }
   }
   broadcast() {
     const w = [];
