@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 16;
+const PROTO = 17;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -38,8 +38,8 @@ const ABIL = {
   fogo:  { skin: 'a8100c1a0507', cd: 4 },                                   // 3: bolas de fogo azul
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
   grow:  { skin: 'a8100c1a0507', cd: 30 },
-  kash:  { skin: '34c4661f8a47f5c518', cd: 18 },
-  slash: { skin: '141416d9d9d6', cd: 6 },                                   // Slash: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
+  kash:  { skin: '141416d9d9d6', cd: 18 },                                  // Slash: solta um monte de moedas (comida) em volta
+  slash: { skin: '34c4661f8a47f5c518', cd: 6 },                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
@@ -493,7 +493,7 @@ class Room {
   eat(w) {
     if (!w.alive) return;
     const r = radiusOf(w.mass), reach = r + 10, mag = w.powers.ima ? IMA_R : 0;
-    const dbl = (w.powers.dobro ? 2 : 1) * (w.skin === KASH_SK && !this.classic ? KASH_EAT : 1);   // KashPay soma com o Dobro (3×)
+    const dbl = (w.powers.dobro ? 2 : 1) * (w.skin === SLASH_SK && !this.classic ? KASH_EAT : 1);   // Slash soma com o Dobro (3×)
     const R = Math.max(reach + 16, mag + 16);
     const x0 = this.fCell(w.x - R), x1 = this.fCell(w.x + R), y0 = this.fCell(w.y - R), y1 = this.fCell(w.y + R);
     for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
