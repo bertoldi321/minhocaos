@@ -420,7 +420,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 17;
+const PROTO = 18;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -444,7 +444,7 @@ const POWERS = {
   veneno: { name: 'Veneno',   color: '#a6e22e', dur: 6,  tag: 'armadilha', desc: 'Poder negativo: a minhoca fica verde e perde 20% do tamanho aos poucos.' },
 };
 const PKEYS = Object.keys(POWERS);
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768, F_HURT = 65536;
 const INV_R = 560;
 // poderes por tecla das peles (o servidor confere pele e recarga); a recarga só aparece depois de usar
 const ABIL_UI = {
@@ -490,7 +490,7 @@ const SKIN_STYLE = {
   '141416d9d9d6': { body: ['#141416', '#d9d9d6'], logo: 'sl' },
 };
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518', SLASH_SK = '141416d9d9d6';
-const ICE = ['#d2f6ff', '#8fd9f2'], TOXIC = ['#a6e22e', '#5c9a12'];
+const ICE = ['#d2f6ff', '#8fd9f2'], TOXIC = ['#a6e22e', '#5c9a12'], HURT = ['#ff5a4a', '#a8140f'];
 const FOOD_COLS = ['#ff5c8a', '#ffd23f', '#7fe7ff', '#8dff9a', '#b9a7ff', '#ff8a3d', '#ffe9d6', '#5ce1e6', '#ff9ecd'];
 
 /* ================= utilidades ================= */
@@ -878,7 +878,7 @@ function applyFlags(w, f) {
   if (w.flags === f) return; w.flags = f;
   const p = {}; for (const k of PKEYS) if (f & PBIT[k]) p[k] = 1;
   w.powers = p; w.boosting = !!(f & F_BOOST); w.frozen = f & F_FROZEN ? 1 : 0; w.slow = w.frozen || p.lento ? 1 : 0;
-  w.dsaw = !!(f & F_DSAW); w.superOn = !!(f & F_SUPER); w.inv = !!(f & F_INV); w.burst = !!(f & F_BURST);
+  w.dsaw = !!(f & F_DSAW); w.superOn = !!(f & F_SUPER); w.inv = !!(f & F_INV); w.burst = !!(f & F_BURST); w.hurt = !!(f & F_HURT);
 }
 function applyPoly(w, q) {
   if (!Array.isArray(q) || typeof q[3] !== 'string') return;
@@ -1277,9 +1277,9 @@ function step(dt, now) {
   control(now);
   updateFood(dt);
   updateFires(dt);
-  for (const w of worms.values()) if (w.alive && w.powers.veneno && Math.random() < dt * 9 && inView(w.x, w.y, 200)) {
+  for (const w of worms.values()) if (w.alive && (w.powers.veneno || w.hurt) && Math.random() < dt * 9 && inView(w.x, w.y, 200)) {
     const p = w.pts[(Math.random() * w.pts.length) | 0] || w;
-    puff(p.x, p.y, Math.random() < .5 ? '#a6e22e' : '#d4ff6a', 1, 40, .7, radiusOf(w.mass) * .5);
+    puff(p.x, p.y, w.hurt && !w.powers.veneno ? (Math.random() < .5 ? '#ff4a3d' : '#ff9a8a') : Math.random() < .5 ? '#a6e22e' : '#d4ff6a', 1, 40, .7, radiusOf(w.mass) * .5);
   }
   borderEmbers(dt);
   { const inv = !!(me && me.alive && me.inv && state === 'play'); if (inv && !wasInv) { toast('Comandos <b>invertidos</b>!', POWERS.inverte.color); sfx('bad'); } wasInv = inv; }
@@ -1494,15 +1494,15 @@ function drawSkinDecor(w, st, r, m) {
   }
 }
 function drawWorm(w) {
-  const r = radiusOf(w.mass), pts = w.pts, n = pts.length, frozen = w.frozen > 0, st = frozen || w.powers.veneno ? null : w.style;
-  const cols = frozen ? ICE : w.powers.veneno ? TOXIC : st ? st.body : w.skin, cl = cols.length, m = r * 3, neckN = st && st.neck ? st.neckN : 0;
+  const r = radiusOf(w.mass), pts = w.pts, n = pts.length, frozen = w.frozen > 0, st = frozen || w.powers.veneno || w.hurt ? null : w.style;
+  const cols = frozen ? ICE : w.powers.veneno ? TOXIC : w.hurt ? HURT : st ? st.body : w.skin, cl = cols.length, m = r * 3, neckN = st && st.neck ? st.neckN : 0;
   let head = true;
   if (!inView(w.x, w.y, m)) {
     head = false;
     let any = false; for (let i = 0; i < n; i += 8) if (inView(pts[i].x, pts[i].y, m + 60)) { any = true; break; }
     if (!any) return;
   }
-  const demon = w.demon && !frozen && !w.powers.veneno;
+  const demon = w.demon && !frozen && !w.powers.veneno && !w.hurt;
   if (demon) {
     // aura escura em volta do corpo e o rabo de diabo (por baixo dos gomos)
     const au = auraSprite(), as = r * 2.6;
@@ -1555,6 +1555,7 @@ function drawWorm(w) {
     const fr = r * (w.style.face ? 1.9 : 1.6); ctx.drawImage(face, w.x - fr, w.y - fr, fr * 2, fr * 2);
     if (frozen) { ctx.fillStyle = 'rgba(160,230,255,.35)'; dot(w.x, w.y, fr * .95); }
     else if (w.powers.veneno) { ctx.fillStyle = 'rgba(166,226,46,.3)'; dot(w.x, w.y, fr * .95); }
+    else if (w.hurt) { ctx.fillStyle = 'rgba(255,40,30,.35)'; dot(w.x, w.y, fr * .95); }
   } else ctx.drawImage(segSprite(st && st.head ? st.head : cols[0]), w.x - hr, w.y - hr, hr * 2, hr * 2);
   if (st && st.headStar) { ctx.fillStyle = st.headStar; starPath(w.x - Math.cos(w.angle) * r * .34, w.y - Math.sin(w.angle) * r * .34, r * .5, w.angle); ctx.fill(); }
   const ca = Math.cos(w.angle), sa = Math.sin(w.angle), lc = Math.cos(w.target), ls = Math.sin(w.target);

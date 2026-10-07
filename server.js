@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 17;
+const PROTO = 18;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -42,7 +42,7 @@ const ABIL = {
   slash: { skin: '34c4661f8a47f5c518', cd: 6 },                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768, F_HURT = 65536;
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
@@ -124,7 +124,7 @@ function encodePoly(w) {
 }
 function flagsOf(w) {
   let f = 0; for (const k in w.powers) if (PBIT[k]) f |= PBIT[k];
-  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; if (w.burstT > 0) f |= F_BURST; return f;
+  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; if (w.burstT > 0) f |= F_BURST; if (w.hurtT > 0) f |= F_HURT; return f;
 }
 
 /* ================= sala ================= */
@@ -431,6 +431,7 @@ class Room {
     if (w.inverted > 0) w.inverted -= dt;
     if (w.cds) for (const k in w.cds) { w.cds[k] -= dt; if (w.cds[k] <= 0) delete w.cds[k]; }
     if (w.burstT > 0) w.burstT -= dt;
+    if (w.hurtT > 0) w.hurtT -= dt;
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
     // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
@@ -646,7 +647,7 @@ class Room {
     for (const [o, i] of hits) {
       if (!o.alive) continue;
       if (slash) {   // Slash: não mata, encolhe 20% e a tela de quem foi atingido pisca em vermelho
-        o.mass = Math.max(14, o.mass * (1 - SLASH_CUT));
+        o.mass = Math.max(14, o.mass * (1 - SLASH_CUT)); o.hurtT = 3;   // fica avermelhada por 3 s
         if (o.client) o.client.send({ t: 'slashed', by: w.name });
       } else if (i <= 2) this.kill(o, w, 'laser'); else this.cut(o, i, w, 'laser');
     }
