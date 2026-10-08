@@ -291,6 +291,10 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 #flash.go::before{animation:flashB 1.4s ease-out forwards}
 #flashText{position:relative;font:400 clamp(46px,11vw,140px)/1 var(--display);color:#fff;letter-spacing:.01em;text-align:center;padding:0 16px;text-shadow:0 0 28px var(--fc),0 0 60px var(--fc),0 6px 0 rgba(0,0,0,.35)}
 #flash.go #flashText{animation:flashC 1.4s ease-out}
+.promo{position:fixed;inset:0;z-index:9;pointer-events:none;display:grid;place-items:center;opacity:0}
+.promo span{font:400 clamp(34px,8vw,84px)/1 var(--display);color:#ffd23f;letter-spacing:.02em;text-shadow:0 0 18px rgba(255,210,63,.8),0 0 50px rgba(255,140,30,.5),0 4px 0 #6b3a00;padding:14px 26px;border-radius:18px;background:rgba(15,9,18,.55)}
+.promo.go{animation:promo 2s linear}
+@keyframes promo{0%,12%,26%,40%,54%,68%,82%{opacity:1}6%,19%,33%,47%,61%,75%{opacity:.25}96%{opacity:1}100%{opacity:0}}
 @keyframes flashA{0%{opacity:0}6%{opacity:1}72%{opacity:1}100%{opacity:0}}
 @keyframes flashB{0%{opacity:.95}18%{opacity:.35}100%{opacity:0}}
 @keyframes flashC{0%{transform:scale(.6)}18%{transform:scale(1.08)}30%{transform:scale(1)}100%{transform:scale(1.04)}}
@@ -403,6 +407,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 <div id="flash" aria-hidden="true"><span id="flashText"></span></div>
 <div id="perf" class="perf" aria-hidden="true"></div>
 <div id="hurt" class="hurt" aria-hidden="true"></div>
+<div id="promo" class="promo" aria-hidden="true"><span>Cupom : UNIVERSE</span></div>
 <div id="chat" class="chat">
   <button id="chatBtn" class="chat-btn" type="button" aria-label="Abrir o chat" aria-expanded="false" aria-controls="chatPanel"><span class="chat-badge" id="chatBadge" hidden></span></button>
   <div class="chat-panel" id="chatPanel" hidden>
@@ -1707,6 +1712,11 @@ function render() {
 
   topWorm = null;
   for (const w of worms.values()) if (w.alive && w.seen && (!topWorm || w.mass > topWorm.mass)) topWorm = w;
+  // alguém pegou a coroa do 1º lugar: pisca o cupom por 2 s para todo mundo que está jogando
+  if (topWorm && topWorm.id !== crownId) {
+    if (crownId && (state === 'play' || state === 'dead') && time - promoT > 6) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
+    crownId = topWorm.id;
+  }
   for (const w of worms.values()) if (w.alive && w.seen && w !== me) drawWorm(w);
   if (me && me.alive && me.seen) drawWorm(me);
   for (const f of fires.values()) drawFire(f);
@@ -1931,7 +1941,7 @@ function requestPlay() {
   if (conn !== 'online') { toast('Ainda conectando ao servidor…', '#b9a9b3'); return; }
   send(Object.assign({ t: 'play' }, look()));
 }
-let lastRank = 99, kingT = -99, milestone = 0, normalTold = false;
+let lastRank = 99, kingT = -99, milestone = 0, normalTold = false, crownId = 0, promoT = -99;
 function flash(text, col) {
   el.flashText.textContent = text; el.flash.style.setProperty('--fc', col);
   el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
