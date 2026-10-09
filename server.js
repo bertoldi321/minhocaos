@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 19;
+const PROTO = 20;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -97,7 +97,8 @@ function banLeft(c) {
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
-const SLASH_SK = '141416d9d9d6', SLASH_CUT = .2;   // Slash: laser que tira 20% do tamanho de quem acerta
+const SLASH_SK = '141416d9d9d6', SLASH_CUT = .2;
+const BID_SK = 'ff149ac2006b', BID_EVERY = 10;   // Campanha de BID: a cada 10 s cresce 5× ou encolhe 5×, na sorte   // Slash: laser que tira 20% do tamanho de quem acerta
 const KASH_EAT = 1.5, KASH_COINS = 20, COIN_R = 20;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
 const CHAT_MAX = 120, CHAT_KEEP = 30;
@@ -329,6 +330,15 @@ class Room {
     if (changed) this.sendRoster();
     for (const w of list) {
       if (!w.alive) continue;
+      if (w.skin === BID_SK && w.client && !w.pup && !this.classic) {
+        if (w.bidT === undefined) w.bidT = BID_EVERY;
+        if ((w.bidT -= dt) <= 0) {
+          w.bidT += BID_EVERY;
+          const up = Math.random() < .5;
+          w.mass = up ? Math.min(MAX_MASS, w.mass * 5) : Math.max(14, w.mass / 5);
+          w.client.send({ t: 'bid', up: up ? 1 : 0, s: BID_EVERY });
+        }
+      }
       if (w.pup) this.botThink(w, list);
       else if (w.skin === DIRECT_SK && w.client && !this.classic) {
         const k = Math.floor(w.mass / PUP_EVERY);
