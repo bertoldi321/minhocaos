@@ -291,6 +291,13 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 #flash.go::before{animation:flashB 1.4s ease-out forwards}
 #flashText{position:relative;font:400 clamp(46px,11vw,140px)/1 var(--display);color:#fff;letter-spacing:.01em;text-align:center;padding:0 16px;text-shadow:0 0 28px var(--fc),0 0 60px var(--fc),0 6px 0 rgba(0,0,0,.35)}
 #flash.go #flashText{animation:flashC 1.4s ease-out}
+.spec{position:fixed;z-index:20;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 10px;max-width:calc(100vw - 32px)}
+.spec-txt{display:grid;text-align:center;min-width:140px}
+.spec-txt small{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+.spec-txt b{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.spec-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:rgba(0,0,0,.3);font-size:14px}
+.spec-exit{border:0;border-radius:10px;background:var(--clay);color:var(--clay-ink);font-weight:700;padding:9px 14px}
+.br-watch{background:#3a2a44;box-shadow:0 5px 0 #1d1322}
 .promo{position:fixed;inset:0;z-index:9;pointer-events:none;display:grid;place-items:center;opacity:0}
 .promo span{font:400 clamp(34px,8vw,84px)/1 var(--display);color:#ffd23f;letter-spacing:.02em;text-shadow:0 0 18px rgba(255,210,63,.8),0 0 50px rgba(255,140,30,.5),0 4px 0 #6b3a00;padding:14px 26px;border-radius:18px;background:rgba(15,9,18,.55)}
 .promo.go{animation:promo 2s linear}
@@ -373,7 +380,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
         <div class="br-box" id="brBox" hidden>
           <p class="br-status" id="brStatus"></p>
           <ul class="br-list" id="brList"></ul>
-          <div class="br-actions"><button type="button" class="play br-ready" id="brReady">Ready</button><button type="button" class="br-start" id="brStart" hidden>Start (Demônio)</button></div>
+          <div class="br-actions"><button type="button" class="play br-ready" id="brReady">Ready</button><button type="button" class="br-start br-watch" id="brWatch" hidden>Assistir a partida</button><button type="button" class="br-start" id="brStart" hidden>Start (Demônio)</button></div>
         </div>
         <button class="play" id="playBtn" type="submit">Jogar</button>
         <p class="keys" id="keysHint"></p>
@@ -407,6 +414,12 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 <div id="flash" aria-hidden="true"><span id="flashText"></span></div>
 <div id="perf" class="perf" aria-hidden="true"></div>
 <div id="hurt" class="hurt" aria-hidden="true"></div>
+<div id="spec" class="spec panel" hidden>
+  <button type="button" class="spec-btn" id="specPrev" aria-label="Anterior">&#9664;</button>
+  <div class="spec-txt"><small>Assistindo · <span id="specCount"></span></small><b id="specName"></b></div>
+  <button type="button" class="spec-btn" id="specNext" aria-label="Próximo">&#9654;</button>
+  <button type="button" class="spec-exit" id="specExit">Sair</button>
+</div>
 <div id="promo" class="promo" aria-hidden="true"><span>Cupom : UNIVERSE</span></div>
 <div id="chat" class="chat">
   <button id="chatBtn" class="chat-btn" type="button" aria-label="Abrir o chat" aria-expanded="false" aria-controls="chatPanel"><span class="chat-badge" id="chatBadge" hidden></span></button>
@@ -1216,7 +1229,8 @@ window.addEventListener('keydown', e => {
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { input.left = true; e.preventDefault(); }
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') { input.right = true; e.preventDefault(); }
   else if (k === 'm' || k === 'M') toggleSound();
-  else if (k === 'Enter' && state === 'over' && tag !== 'BUTTON') requestPlay();
+  else if (k === 'Enter' && state === 'over' && tag !== 'BUTTON') showMenu();
+  else if (state === 'spec' && (k === 'ArrowLeft' || k === 'ArrowRight')) { specCycle(k === 'ArrowLeft' ? -1 : 1); specKey = ''; e.preventDefault(); }
   else if (k === 'Enter' && state === 'play') { e.preventDefault(); setChat(true, true); }
 });
 window.addEventListener('keyup', e => {
@@ -1292,10 +1306,25 @@ function step(dt, now) {
   demonEmbers(dt);
   updateParts(dt);
   pingT -= dt; if (pingT <= 0 && conn === 'online') { pingT = 2; send({ t: 'p', c: performance.now() }); }
-  if (state === 'dead') { deadT -= dt; if (deadT <= 0) showOver(); }
+  if (state === 'dead') { deadT -= dt; if (deadT <= 0) { if (brOn && br.phase === 'play') startSpec(); else showOver(); } }   // Battle Royale: quem morre assiste
 }
 
-let attract = null, attractT = 0;
+let attract = null, attractT = 0, specW = null, specKey = '';
+function specPool() { return [...worms.values()].filter(w => w.alive && w.seen).sort((a, b) => b.mass - a.mass); }
+function specCycle(d) {
+  const pool = specPool(); if (!pool.length) { specW = null; return; }
+  const i = specW ? pool.indexOf(specW) : -1;
+  specW = pool[i < 0 ? 0 : (i + d + pool.length) % pool.length];
+}
+function startSpec() {
+  state = 'spec'; specW = null; specCycle(0);
+  el.hud.hidden = true; el.over.hidden = true; el.menu.hidden = true; $('#spec').hidden = false;
+}
+function renderSpec() {
+  const n = specPool().length, key = (specW ? specW.id + specW.name : '-') + '|' + n;
+  if (key === specKey) return; specKey = key;
+  $('#specName').textContent = specW ? specW.name : 'ninguém'; $('#specCount').textContent = `${n} ${n === 1 ? 'vivo' : 'vivos'}`;
+}
 function updateCamera(dt) {
   const base = Math.sqrt(W * H) / 1150;
   let tz = cam.z;
@@ -1304,6 +1333,14 @@ function updateCamera(dt) {
     cam.x += (me.x - cam.x) * k; cam.y += (me.y - cam.y) * k;
     const rr = radiusOf(me.mass);
     tz = base * clamp(1.1 - (rr - 11) * .02, rr > 100 ? Math.max(.25, 46 / rr) : .46, 1.1);   // minhoca gigante: a câmera se afasta mais
+  } else if (state === 'spec') {
+    // espectador do Battle Royale: a câmera segue quem está vivo
+    if (!specW || !specW.alive || !worms.has(specW.id)) specCycle(0);
+    if (specW) {
+      const k = 1 - Math.pow(.002, dt); cam.x += (specW.x - cam.x) * k; cam.y += (specW.y - cam.y) * k;
+      const rr = radiusOf(specW.mass); tz = base * clamp(1.1 - (rr - 11) * .02, rr > 100 ? Math.max(.25, 46 / rr) : .46, 1.1);
+    }
+    renderSpec();
   } else if (state === 'menu') {
     attractT -= dt;
     if (!attract || !attract.alive || attractT <= 0) {
@@ -1994,7 +2031,7 @@ function showOver() {
   $('#againBtn').focus({ preventScroll: true });
 }
 function showMenu() {
-  state = 'menu'; myWormId = 0;
+  state = 'menu'; myWormId = 0; $('#spec').hidden = true;
   if (skinIdx === DEMON_IDX && demonTier === 'limited' && demonBanLeft() > 0) selectSkin(0);   // pele em recarga: troca para outra
   if (me) me.isMe = false;
   me = null;
@@ -2148,6 +2185,7 @@ function renderBr() {
     brEl.status.innerHTML = br.phase === 'play' ? `Partida em andamento: <b>${br.alive}</b> vivos. Você entra na próxima rodada.` : `Fim da rodada${br.win ? `: <b>${esc(br.win)}</b> venceu` : ''}. A sala de espera abre em instantes.`;
     brEl.ready.hidden = true; brEl.start.hidden = true;
   }
+  $('#brWatch').hidden = !(br.phase === 'play');
 }
 brEl.ready.addEventListener('click', toggleReady);
 brEl.start.addEventListener('click', () => { if (conn === 'online' && brOn && br.phase === 'lobby' && canStartBr()) send(Object.assign({ t: 'start' }, look())); });
@@ -2214,7 +2252,11 @@ el.name.value = store.get('minhocaos.name', '');
 el.name.addEventListener('input', sendName);
 el.soundBtn.textContent = muted ? 'Som desligado' : 'Som ligado';
 $('#startForm').addEventListener('submit', e => { e.preventDefault(); requestPlay(); });
-$('#againBtn').addEventListener('click', () => { if (brOn) showMenu(); else requestPlay(); });
+$('#againBtn').addEventListener('click', showMenu);   // morreu: volta para a tela de pele
+$('#specPrev').addEventListener('click', () => { specCycle(-1); specKey = ''; });
+$('#specNext').addEventListener('click', () => { specCycle(1); specKey = ''; });
+$('#specExit').addEventListener('click', showMenu);
+$('#brWatch').addEventListener('click', () => { if (brOn && br.phase === 'play') startSpec(); });
 $('#menuBtn').addEventListener('click', showMenu);
 el.soundBtn.addEventListener('click', toggleSound);
 el.copyLink.addEventListener('click', () => {

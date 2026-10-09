@@ -859,6 +859,7 @@ class Client {
         if (DEV && this.worm && num(m.a)) { this.worm.angle = this.worm.target = m.a; }
         if (DEV && this.worm && num(m.mass)) this.worm.mass = clamp(m.mass, 14, 5000);
         if (DEV && num(m.born) && this.worm) this.worm.born = this.room.time - m.born;
+        if (DEV && m.die && this.worm && this.worm.alive && this.room) this.room.kill(this.worm, null, 'wall');
         if (DEV && num(m.drop) && this.worm && this.room) this.room.addDrop(this.worm.x, this.worm.y, clamp(m.drop, 1, 1e6), 'ffffff');
         break;
     }
