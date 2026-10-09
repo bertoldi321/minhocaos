@@ -51,6 +51,12 @@ const FB_N = 6, FB_R = 22, FB_TTL = 10, FB_FLY = .5, FB_MIN = 150, FB_MAX = 330,
 const NECK = 4;
 /* bot da casa: sempre tem um "Native Bot" na toca enquanto houver gente conectada */
 const BOT_NAME = 'Native Bot', BOT_SKIN = '1877f2ffffff', BOT_RESPAWN = 3;
+// mais 2 bots com nome de gente: a cada vez que morrem voltam com outro nome e outra cor
+const BOT_PEOPLE = ['Lucas', 'Gabriel', 'Rafael', 'Mateus', 'Pedro', 'Gustavo', 'Felipe', 'Bruno', 'Thiago', 'Diego', 'Leandro', 'Rodrigo', 'Vinícius', 'Caio', 'Murilo',
+  'Juliana', 'Camila', 'Fernanda', 'Larissa', 'Beatriz', 'Mariana', 'Amanda', 'Letícia', 'Bianca', 'Carol', 'Isabela', 'Natália', 'Patrícia', 'Aline', 'Renata',
+  'Zé', 'Tião', 'Dona Cida', 'Seu Jorge', 'Juninho', 'Paulinha', 'Marquinhos', 'Tati', 'Duda', 'Rafinha'];
+const BOT_COLORS = ['e63946', 'f4a261', '2a9d8f', '8338ec', 'ff006e', '3a86ff', 'ffbe0b', '06d6a0', 'fb5607', '9b5de5', '00bbf9', 'f15bb5', '80b918', 'ef476f'];
+const pick = a => a[Math.floor(Math.random() * a.length)];
 const BAD_ORB = { lento: 1, cego: 1, veneno: 1 };
 const BOT_OFFS = [0, .35, -.35, .7, -.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, 3];                                    // gomos logo atrás da cabeça: contam como cabeça com cabeça
 const CELL = 64, GN = Math.ceil(WORLD_R * 2 / CELL) + 5;
@@ -148,7 +154,7 @@ class Room {
     this.fgrid = Array.from({ length: FGN * FGN }, () => []);          // grade fixa das bolinhas: só muda quando alguém come
     for (let i = 0; i < FOOD_N; i++) this.fAdd(this.slots[i]);
     this.emptySince = Date.now(); this.rosterT = 0;
-    this.bot = null; this.botT = 1;
+    this.bots = [{ w: null, t: 1 }, { w: null, t: 2 }, { w: null, t: 3 }];   // 0 = Native Bot, 1 e 2 = bots com nome de gente
     this.chat = [];                                   // últimas mensagens, para quem entra depois
   }
   gCell(v) { const c = Math.floor((v + WORLD_R) / CELL) + 2; return c >= 0 ? (c < GN ? c : GN - 1) : 0; }
@@ -329,21 +335,32 @@ class Room {
         if (k > (w.pupK || 0)) { w.pupK = k; this.spawnPups(w, 2); }
       }
     }
-    if (this.bot && this.bot.alive) this.botThink(this.bot, list);
-    else if (!this.br && this.clients.size && (this.botT -= dt) <= 0) this.spawnBot();
+    for (let i = 0; i < this.bots.length; i++) {
+      const b = this.bots[i];
+      if (b.w && b.w.alive) this.botThink(b.w, list);
+      else if (!this.br && this.clients.size && (b.t -= dt) <= 0) this.spawnBot(i);
+    }
     if (this.br) this.brTick(dt);
     if (this.tick % SEND_EVERY === 0) this.broadcast();
   }
 
   /* ---------- Native Bot ---------- */
-  spawnBot() {
+  spawnBot(slot = 0) {
     const p = this.safeSpot(), ang = Math.atan2(-p.y, -p.x);
-    const w = { id: this.nextWorm++, name: BOT_NAME, skin: BOT_SKIN, cols: BOT_SKIN.match(/.{6}/g), x: p.x, y: p.y, angle: ang, target: ang,
+    let name = BOT_NAME, skin = BOT_SKIN;
+    if (slot) {
+      const used = new Set([...this.worms.values()].filter(o => o.alive).map(o => o.name)); if (this.bots[slot].last) used.add(this.bots[slot].last);
+      const free = BOT_PEOPLE.filter(n => !used.has(n));
+      name = pick(free.length ? free : BOT_PEOPLE);
+      const a = pick(BOT_COLORS); let c = pick(BOT_COLORS); while (c === a) c = pick(BOT_COLORS);
+      skin = a + c;
+    }
+    const w = { id: this.nextWorm++, name, skin, cols: skin.match(/.{6}/g), x: p.x, y: p.y, angle: ang, target: ang,
       wantBoost: false, boosting: false, mass: 60, pts: [], powers: {}, frozen: 0, drop: 0, kills: 0, alive: true, client: null, bot: true, think: 0, wander: ang };
     const sp = radiusOf(w.mass) * .55, n = segCount(w.mass);
     for (let i = 1; i <= n; i++) w.pts.push({ x: w.x - Math.cos(ang) * sp * i, y: w.y - Math.sin(ang) * sp * i });
     w.fam = w.id;
-    this.worms.set(w.id, w); this.bot = w; this.botT = BOT_RESPAWN;
+    this.worms.set(w.id, w); this.bots[slot].w = w; this.bots[slot].last = name; this.bots[slot].t = BOT_RESPAWN + Math.random() * 2;
     this.events.push(['n', w.id, w.name, w.skin]);
   }
   // filhotes da pele Direct Ads: iguais ao dono, não machucam nem são machucados por ele
