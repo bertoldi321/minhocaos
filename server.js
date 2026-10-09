@@ -670,6 +670,14 @@ class Room {
 /* ================= salas ================= */
 const rooms = new Map();
 function roomCounts() { const n = {}; for (const r of rooms.values()) n[r.name] = r.clients.size; return n; }
+// /reset no chat: recomeça todas as tocas do zero (mapa novo, todo mundo volta para o menu)
+function resetAll() {
+  for (const [name, old] of [...rooms]) {
+    const r = new Room(name); rooms.set(name, r);
+    const cs = [...old.clients]; old.clients.clear(); old.worms.clear();
+    for (const c of cs) { c.worm = null; c.room = null; c.send({ t: 'reset' }); r.join(c); }
+  }
+}
 function rosterAll() { for (const r of rooms.values()) if (r.clients.size) r.sendRoster(); }
 function getRoom(name) {
   let r = rooms.get(name);
@@ -799,6 +807,7 @@ class Client {
       case 'chat': {
         if (!this.room) return;
         const x = cleanChat(m.x); if (!x) return;
+        if (x.toLowerCase() === '/reset') { resetAll(); return; }   // comando escondido: não aparece no chat de ninguém
         const now = Date.now();
         if (now - this.chatT < 700) return;                                  // no máximo uma mensagem a cada 0,7 s
         if (now - this.chatW > 10000) { this.chatW = now; this.chatN = 0; }

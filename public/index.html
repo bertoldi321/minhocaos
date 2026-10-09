@@ -1083,6 +1083,7 @@ function onMessage(m) {
     case 'demon': setDemonState(m); break;
     case 'cd': if (ABIL_UI[m.k]) { cds[m.k] = performance.now() + (+m.s || ABIL_UI[m.k].cd) * 1000; if (m.k === 'grow') { toast('<b>Triplicou</b> de tamanho!', '#ff3b1a'); sfx('power'); } else if (m.k !== 'laser' && m.k !== 'fogo') sfx('power'); } break;
     case 'chat': addChat(m); break;
+    case 'reset': if (state !== 'menu') showMenu(); toast('O jogo foi <b>reiniciado</b>', '#ffd23f'); break;
     case 'slashed': if (state === 'play') { toast(`O laser do <b>${esc(cleanName(m.by))}</b> tirou 20% do seu tamanho`, '#ff3b1a'); sfx('bad'); const h = $('#hurt'); h.classList.remove('go'); void h.offsetWidth; h.classList.add('go'); } break;
     case 'br': onBr(m); break;
     case 'chatlog': chatEl.log.innerHTML = ''; for (const q of Array.isArray(m.l) ? m.l : []) addChat(q, true); break;
