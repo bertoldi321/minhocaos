@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 18;
+const PROTO = 19;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -817,6 +817,14 @@ class Client {
         const r = this.room; r.chat.push(msg); if (r.chat.length > CHAT_KEEP) r.chat.shift();
         const out = JSON.stringify(Object.assign({ t: 'chat' }, msg));
         for (const c of r.clients) c.sendText(out);
+        break;
+      }
+      case 'emo': {   // emojis de zoeira, aparecem em cima da minhoca para a sala toda
+        if (!this.room || !this.worm || !this.worm.alive) return;
+        const e = m.e | 0; if (e < 0 || e > 6) return;
+        const now = Date.now(); if (now - (this.emoT || 0) < 500) return; this.emoT = now;
+        const out = JSON.stringify({ t: 'emo', w: this.worm.id, e });
+        for (const c of this.room.clients) c.sendText(out);
         break;
       }
       case 'senha': {
