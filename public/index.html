@@ -317,8 +317,8 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .emo-bar button:active{transform:scale(.9)}
 .emo-bar button kbd{position:absolute;right:2px;bottom:1px;font:700 9px var(--ui);color:rgba(255,255,255,.55)}
 @media (pointer:coarse){.emo-bar button kbd{display:none}.emo-bar{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}.emo-bar button{width:36px;height:36px;font-size:19px}}
-.promo{position:fixed;inset:0;z-index:9;pointer-events:none;display:grid;place-items:center;opacity:0}
-.promo span{font:400 clamp(34px,8vw,84px)/1 var(--display);color:#ffd23f;letter-spacing:.02em;text-shadow:0 0 18px rgba(255,210,63,.8),0 0 50px rgba(255,140,30,.5),0 4px 0 #6b3a00;padding:14px 26px;border-radius:18px;background:rgba(15,9,18,.55)}
+.promo{position:fixed;inset:0;z-index:30;pointer-events:none;display:grid;place-items:center;opacity:0}
+.promo span{transform:translateY(clamp(90px,17vh,160px));font:400 clamp(34px,8vw,84px)/1 var(--display);color:#ffd23f;letter-spacing:.02em;text-shadow:0 0 18px rgba(255,210,63,.8),0 0 50px rgba(255,140,30,.5),0 4px 0 #6b3a00;padding:14px 26px;border-radius:18px;background:rgba(15,9,18,.55)}
 .promo.go{animation:promo 2s linear}
 @keyframes promo{0%,12%,26%,40%,54%,68%,82%{opacity:1}6%,19%,33%,47%,61%,75%{opacity:.25}96%{opacity:1}100%{opacity:0}}
 @keyframes flashA{0%{opacity:0}6%{opacity:1}72%{opacity:1}100%{opacity:0}}
@@ -446,7 +446,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
   <button type="button" class="spec-btn" id="specNext" aria-label="Próximo">&#9654;</button>
   <button type="button" class="spec-exit" id="specExit">Sair</button>
 </div>
-<div id="promo" class="promo" aria-hidden="true"><span>Cupom : UNIVERSE</span></div>
+<div id="promo" class="promo" aria-hidden="true"><span>Cupom : Universe</span></div>
 <div id="chat" class="chat">
   <button id="chatBtn" class="chat-btn" type="button" aria-label="Abrir o chat" aria-expanded="false" aria-controls="chatPanel"><span class="chat-badge" id="chatBadge" hidden></span></button>
   <div class="chat-panel" id="chatPanel" hidden>
@@ -1798,7 +1798,7 @@ function render() {
   for (const w of worms.values()) if (w.alive && w.seen && (!topWorm || w.mass > topWorm.mass)) topWorm = w;
   // alguém pegou a coroa do 1º lugar: pisca o cupom por 2 s para todo mundo que está jogando
   if (topWorm && topWorm.id !== crownId) {
-    if (crownId && (state === 'play' || state === 'dead') && time - promoT > 6) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
+    if ((crownId || topWorm === me) && (state === 'play' || state === 'dead' || state === 'spec') && time - promoT > 3) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
     crownId = topWorm.id;
   }
   for (const w of worms.values()) if (w.alive && w.seen && w !== me) drawWorm(w);
