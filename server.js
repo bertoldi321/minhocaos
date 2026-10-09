@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 20;
+const PROTO = 21;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -39,10 +39,12 @@ const ABIL = {
   boost: { skin: 'a8100c1a0507', cd: 4, burst: 3, spd: 410 * 3 },            // 4: acelerar 3× mais rápido
   grow:  { skin: 'a8100c1a0507', cd: 30 },
   kash:  { skin: '141416d9d9d6', cd: 18 },                                  // Slash: solta um monte de moedas (comida) em volta
-  slash: { skin: '34c4661f8a47f5c518', cd: 6 },                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
+  slash: { skin: '34c4661f8a47f5c518', cd: 6 },
+  escudo: { skin: 'c2542ff4f4f4', cd: 15 },                                       // Full Stack: 3 s de escudo                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
-const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768, F_HURT = 65536;
+const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768, F_HURT = 65536, F_SHLD = 131072;
+const SHIELD_T = 3;   // Full Stack: escudo dura 3 s
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
@@ -131,7 +133,7 @@ function encodePoly(w) {
 }
 function flagsOf(w) {
   let f = 0; for (const k in w.powers) if (PBIT[k]) f |= PBIT[k];
-  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; if (w.burstT > 0) f |= F_BURST; if (w.hurtT > 0) f |= F_HURT; return f;
+  if (w.boosting) f |= F_BOOST; if (w.frozen > 0) f |= F_FROZEN; if (w.sawOn) f |= F_DSAW; if (w.superOn) f |= F_SUPER; if (w.inverted > 0) f |= F_INV; if (w.burstT > 0) f |= F_BURST; if (w.hurtT > 0) f |= F_HURT; if (w.shieldT > 0) f |= F_SHLD; return f;
 }
 
 /* ================= sala ================= */
@@ -459,6 +461,7 @@ class Room {
     if (w.cds) for (const k in w.cds) { w.cds[k] -= dt; if (w.cds[k] <= 0) delete w.cds[k]; }
     if (w.burstT > 0) w.burstT -= dt;
     if (w.hurtT > 0) w.hurtT -= dt;
+    if (w.shieldT > 0) w.shieldT -= dt;
     if (P.veneno && w.poison) w.mass = Math.max(14, w.mass - w.poison * dt);
     const fz = w.frozen > 0 || !!P.lento, turbo = !!P.turbo, r = radiusOf(w.mass);
     // pele Demônio: Espaço liga a serra, Shift dá um turbo mais forte (os dois gastam tamanho, como acelerar)
@@ -573,7 +576,7 @@ class Room {
         const rr = hr + FB_R, dx = f.x - w.x, dy = f.y - w.y;
         if (dx * dx + dy * dy < rr * rr) { burnt = f; break; }
       }
-      if (burnt) { ev.push({ k: 'die', v: w, by: this.worms.get(burnt.owner) || null, c: 'fire' }); continue; }
+      if (burnt && !(w.shieldT > 0)) { ev.push({ k: 'die', v: w, by: this.worms.get(burnt.owner) || null, c: 'fire' }); continue; }
       const x0 = this.gCell(w.x - R), x1 = this.gCell(w.x + R), y0 = this.gCell(w.y - R), y1 = this.gCell(w.y + R);
       let hits = null;                                             // minhoca tocada → menor índice tocado (0 = cabeça)
       for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
@@ -593,7 +596,8 @@ class Room {
         }
       }
       if (!hits) continue;
-      if (saw) { for (const [o, h] of hits) ev.push(h.min <= 2 ? { k: 'die', v: o, by: w, c: 'saw' } : { k: 'cut', v: o, by: w, i: h.min }); continue; }
+      if (saw) { for (const [o, h] of hits) if (!(o.shieldT > 0)) ev.push(h.min <= 2 ? { k: 'die', v: o, by: w, c: 'saw' } : { k: 'cut', v: o, by: w, i: h.min }); continue; }
+      if (w.shieldT > 0) continue;   // Full Stack com escudo: atravessa o corpo dos outros
       for (const [o, h] of hits) {
         // de frente: encostou na cabeça, ou no pescoço de quem vinha na direção contrária
         const front = h.min === 0 || (h.min <= 2 && Math.cos(w.angle - o.angle) < 0);
@@ -644,6 +648,7 @@ class Room {
     else if (k === 'grow') { if (w.mass >= MAX_MASS) return false; w.mass = Math.min(MAX_MASS, w.mass * 3); }
     else if (k === 'kash') this.kashDrop(w);
     else if (k === 'slash') this.fireLaser(w, true);
+    else if (k === 'escudo') w.shieldT = SHIELD_T;
     else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
     w.cds[k] = A.cd;
     return true;
