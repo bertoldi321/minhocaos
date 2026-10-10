@@ -330,6 +330,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .notice-ticket small{font:700 10px var(--ui);letter-spacing:.16em;text-transform:uppercase;color:#ffd23f}
 .notice-ticket b{margin:0;font:400 22px/1.1 var(--display);color:#ffd23f}
 .notice-ok{margin-top:4px}
+.notice-ticket b.notice-q{font-size:34px;line-height:1}
 @keyframes noticeIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
 @keyframes noticeKey{0%,100%{transform:translateY(0);box-shadow:0 5px 0 #b9a58a,0 0 24px rgba(255,210,63,.5)}50%{transform:translateY(3px);box-shadow:0 2px 0 #b9a58a,0 0 34px rgba(255,210,63,.8)}}
 @media (prefers-reduced-motion:reduce){.notice,.notice-key{animation:none}}
@@ -466,13 +467,13 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
   <div class="notice">
     <p class="notice-kicker">Atenção, minhoca</p>
     <h2 id="noticeTitle">Antes de entrar na toca</h2>
+    <div class="notice-row coupon">
+      <div class="notice-ticket"><small>Cupom</small><b class="notice-q">?</b></div>
+      <div><b>Anote no caderno</b><span>O cupom é para o lançamento de um novo produto. Por enquanto, é só anotar e guardar.</span></div>
+    </div>
     <div class="notice-row">
       <kbd class="notice-key">1</kbd>
-      <div><b>Os poderes ficam na tecla 1</b><span>Peles com poder e a Demônio usam o poder apertando 1. Quem tem mais de um segue 2, 3, 4… No celular, use os botões na tela.</span></div>
-    </div>
-    <div class="notice-row coupon">
-      <div class="notice-ticket"><small>Cupom</small><b>Universe</b></div>
-      <div><b>Anote no caderno</b><span>O cupom é para o lançamento de um novo produto. Por enquanto, é só anotar e guardar.</span></div>
+      <div><b>Os poderes ficam na tecla 1</b><span>Tem mais de um? Use 2, 3, 4…</span></div>
     </div>
     <button type="button" class="play notice-ok" id="noticeOk">Entendi, bora jogar</button>
   </div>
@@ -1845,7 +1846,7 @@ function render() {
   for (const w of worms.values()) if (w.alive && w.seen && (!topWorm || w.mass > topWorm.mass)) topWorm = w;
   // alguém pegou a coroa do 1º lugar: pisca o cupom por 2 s para todo mundo que está jogando
   if (topWorm && topWorm.id !== crownId) {
-    if ((crownId || topWorm === me) && (state === 'play' || state === 'dead' || state === 'spec') && time - promoT > 3) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
+    if (topWorm === me && state === 'play' && time - promoT > 3) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
     crownId = topWorm.id;
   }
   for (const w of worms.values()) if (w.alive && w.seen && w !== me) drawWorm(w);
