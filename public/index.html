@@ -317,6 +317,22 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 .emo-bar button:active{transform:scale(.9)}
 .emo-bar button kbd{position:absolute;right:2px;bottom:1px;font:700 9px var(--ui);color:rgba(255,255,255,.55)}
 @media (pointer:coarse){.emo-bar button kbd{display:none}.emo-bar{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 56px)}.emo-bar button{width:36px;height:36px;font-size:19px}}
+.notice-screen{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px;background:rgba(8,4,10,.8);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.notice-screen[hidden]{display:none}
+.notice{position:relative;width:min(520px,100%);display:grid;gap:14px;padding:26px 24px 22px;border-radius:22px;background:linear-gradient(160deg,#2a1530,#170b1b);border:3px solid #ffd23f;box-shadow:0 0 0 6px rgba(255,210,63,.18),0 0 60px rgba(255,138,61,.45),0 24px 60px rgba(0,0,0,.6);animation:noticeIn .45s cubic-bezier(.3,1.5,.5,1)}
+.notice-kicker{margin:0;font:700 12px var(--ui);letter-spacing:.18em;text-transform:uppercase;color:#ffd23f}
+.notice h2{margin:-6px 0 2px;font:400 clamp(30px,7vw,40px)/1.05 var(--display);color:var(--clay);text-wrap:balance}
+.notice-row{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:14px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+.notice-row b{display:block;font:700 17px/1.2 var(--ui);color:#fff;margin-bottom:4px}
+.notice-row span{font:400 14px/1.4 var(--ui);color:var(--ink-dim)}
+.notice-key{display:grid;place-items:center;width:62px;height:62px;border-radius:14px;background:#fff6e6;color:#1d1020;font:400 38px/1 var(--display);box-shadow:0 5px 0 #b9a58a,0 0 24px rgba(255,210,63,.5);animation:noticeKey 1.4s ease-in-out infinite}
+.notice-ticket{display:grid;place-items:center;min-width:96px;padding:8px 10px;border:2px dashed #ffd23f;border-radius:12px;background:rgba(255,210,63,.1);transform:rotate(-4deg)}
+.notice-ticket small{font:700 10px var(--ui);letter-spacing:.16em;text-transform:uppercase;color:#ffd23f}
+.notice-ticket b{margin:0;font:400 22px/1.1 var(--display);color:#ffd23f}
+.notice-ok{margin-top:4px}
+@keyframes noticeIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+@keyframes noticeKey{0%,100%{transform:translateY(0);box-shadow:0 5px 0 #b9a58a,0 0 24px rgba(255,210,63,.5)}50%{transform:translateY(3px);box-shadow:0 2px 0 #b9a58a,0 0 34px rgba(255,210,63,.8)}}
+@media (prefers-reduced-motion:reduce){.notice,.notice-key{animation:none}}
 .promo{position:fixed;inset:0;z-index:30;pointer-events:none;display:grid;place-items:center;opacity:0}
 .promo span{transform:translateY(clamp(90px,17vh,160px));font:400 clamp(34px,8vw,84px)/1 var(--display);color:#ffd23f;letter-spacing:.02em;text-shadow:0 0 18px rgba(255,210,63,.8),0 0 50px rgba(255,140,30,.5),0 4px 0 #6b3a00;padding:14px 26px;border-radius:18px;background:rgba(15,9,18,.55)}
 .promo.go{animation:promo 2s linear}
@@ -445,6 +461,21 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
   <div class="spec-txt"><small>Assistindo · <span id="specCount"></span></small><b id="specName"></b></div>
   <button type="button" class="spec-btn" id="specNext" aria-label="Próximo">&#9654;</button>
   <button type="button" class="spec-exit" id="specExit">Sair</button>
+</div>
+<div id="notice" class="notice-screen" hidden role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+  <div class="notice">
+    <p class="notice-kicker">Atenção, minhoca</p>
+    <h2 id="noticeTitle">Antes de entrar na toca</h2>
+    <div class="notice-row">
+      <kbd class="notice-key">1</kbd>
+      <div><b>Os poderes ficam na tecla 1</b><span>Peles com poder e a Demônio usam o poder apertando 1. Quem tem mais de um segue 2, 3, 4… No celular, use os botões na tela.</span></div>
+    </div>
+    <div class="notice-row coupon">
+      <div class="notice-ticket"><small>Cupom</small><b>Universe</b></div>
+      <div><b>Anote no caderno</b><span>O cupom é para o lançamento de um novo produto. Por enquanto, é só anotar e guardar.</span></div>
+    </div>
+    <button type="button" class="play notice-ok" id="noticeOk">Entendi, bora jogar</button>
+  </div>
 </div>
 <div id="promo" class="promo" aria-hidden="true"><span>Cupom : Universe</span></div>
 <div id="chat" class="chat">
@@ -2321,7 +2352,13 @@ const NEWS = [
 $('#newsList').innerHTML = NEWS.map(([ic, c, t, d]) => `<li><span class="news-ico" style="--c:${c}">${iconSVG(ic)}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('');
 const newsEl = $('#news');
 function closeNews() { newsEl.hidden = true; store.set('minhocaos.news', NEWS_ID); }
-if (store.get('minhocaos.news', '') !== NEWS_ID) { newsEl.hidden = false; setTimeout(() => $('#newsOk').focus({ preventScroll: true }), 50); }
+function maybeNews() { if (store.get('minhocaos.news', '') !== NEWS_ID) { newsEl.hidden = false; setTimeout(() => $('#newsOk').focus({ preventScroll: true }), 50); } }
+// aviso de entrada (toda vez): poderes na tecla 1 e o cupom Universe
+const noticeEl = $('#notice');
+function showNotice() { noticeEl.hidden = false; setTimeout(() => $('#noticeOk').focus({ preventScroll: true }), 50); }
+function closeNotice() { if (noticeEl.hidden) return; noticeEl.hidden = true; maybeNews(); }
+$('#noticeOk').addEventListener('click', closeNotice);
+window.addEventListener('keydown', e => { if (!noticeEl.hidden && (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopImmediatePropagation(); closeNotice(); } }, true);
 $('#newsOk').addEventListener('click', closeNews);
 newsEl.addEventListener('click', e => { if (e.target === newsEl) closeNews(); });
 window.addEventListener('keydown', e => { if (!newsEl.hidden && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); e.stopImmediatePropagation(); closeNews(); } }, true);
@@ -2378,7 +2415,7 @@ function frame(now) {
 /* abertura: A Native Swipe Community creation */
 {
   const intro = $('#intro'); let gone = false;
-  const close = () => { if (gone) return; gone = true; intro.classList.add('out'); setTimeout(() => intro.remove(), 600); window.removeEventListener('keydown', onKey, true); };
+  const close = () => { if (gone) return; gone = true; intro.classList.add('out'); setTimeout(() => intro.remove(), 600); showNotice(); window.removeEventListener('keydown', onKey, true); };
   const onKey = e => { e.preventDefault(); e.stopImmediatePropagation(); close(); };
   intro.addEventListener('pointerdown', e => { e.preventDefault(); close(); });
   window.addEventListener('keydown', onKey, true);
