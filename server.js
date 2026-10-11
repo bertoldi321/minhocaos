@@ -22,7 +22,7 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 21;
+const PROTO = 22;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
@@ -40,11 +40,13 @@ const ABIL = {
   grow:  { skin: 'a8100c1a0507', cd: 30 },
   kash:  { skin: '141416d9d9d6', cd: 18 },                                  // Slash: solta um monte de moedas (comida) em volta
   slash: { skin: '34c4661f8a47f5c518', cd: 6 },
-  escudo: { skin: 'c2542ff4f4f4', cd: 15 },                                       // Full Stack: 3 s de escudo                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
+  escudo: { skin: 'c2542ff4f4f4', cd: 15 },
+  roubo: { skin: '14110dc9a14a', cd: 30 },                                        // UP: rouba os poderes bons de todo mundo                                       // Full Stack: 3 s de escudo                             // KashPay: laser que encolhe 20%                            // KashPay: solta um monte de moedas (comida) em volta                                  // 5: triplica de tamanho (até MAX_MASS)
 };
 const MAX_MASS = 1e15, PUP_MAX = 6, PUP_EVERY = 1000, PUP_MASS = 60;
 const PBIT = { ima: 1, turbo: 2, fogo: 4, serra: 8, gelo: 16, dobro: 32, lento: 256, cego: 512, veneno: 1024, inverte: 8192 }, F_BOOST = 64, F_FROZEN = 128, F_DSAW = 2048, F_SUPER = 4096, F_INV = 16384, F_BURST = 32768, F_HURT = 65536, F_SHLD = 131072;
-const SHIELD_T = 3;   // Full Stack: escudo dura 3 s
+const SHIELD_T = 3;
+const UP_GOOD = ['ima', 'turbo', 'serra', 'gelo', 'dobro', 'fogo', 'inverte'], UP_DUR = 20;   // UP: poderes roubados duram 20 s   // Full Stack: escudo dura 3 s
 const ORB_WEIGHTS = [['ima', 40], ['turbo', 21], ['dobro', 6], ['cresce', 6], ['inverte', 5], ['lento', 5], ['gelo', 5], ['fogo', 5], ['cego', 4], ['veneno', 2], ['serra', 1]];
 const ORB_TYPES = ORB_WEIGHTS.map(w => w[0]);
 const SLOW = .42, GROW = 1.2, POISON_LOSS = .2;                      // Lerdeza: mesma lentidão do gelo · Crescer: +20%
@@ -649,9 +651,23 @@ class Room {
     else if (k === 'kash') this.kashDrop(w);
     else if (k === 'slash') this.fireLaser(w, true);
     else if (k === 'escudo') w.shieldT = SHIELD_T;
+    else if (k === 'roubo') this.stealAll(w);
     else if (A.burst) { w.burstT = A.burst; w.burstSpd = A.spd; }
     w.cds[k] = A.cd;
     return true;
+  }
+  // UP: tira os poderes bons de todas as outras minhocas da toca, ao mesmo tempo, e fica com eles por 20 s
+  stealAll(w) {
+    const got = new Set(); let victims = 0;
+    for (const o of this.worms.values()) {
+      if (o === w || !o.alive || o.fam === w.fam) continue;
+      let took = false;
+      for (const k of UP_GOOD) if (o.powers[k] > 0) { delete o.powers[k]; got.add(k); took = true; }
+      if (took) { victims++; if (o.client) o.client.send({ t: 'roubado', by: w.name }); }
+    }
+    const p = {};
+    for (const k of got) { w.powers[k] = Math.max(w.powers[k] || 0, UP_DUR); p[k] = w.powers[k]; }
+    if (w.client) w.client.send({ t: 'roubo', p, n: victims });
   }
   // KashPay: um monte de moedas em volta da cabeça (quanto maior a minhoca, mais vale)
   kashDrop(w) {
