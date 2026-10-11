@@ -13,6 +13,7 @@
 */
 const http = require('http');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 
@@ -22,12 +23,12 @@ const DEV = !!process.env.MINHOCAOS_DEV;          // libera comandos de teste
 const SIM_LAG = +process.env.MINHOCAOS_LAG || 0;  // atraso artificial (ms, ida e volta) para testes
 
 /* ================= regras (iguais às do cliente) ================= */
-const PROTO = 22;
+const PROTO = 23;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;   // DEMON_SPEED: Shift da pele Demônio
 const FOOD_N = 2520, ORB_N = 36;   // 50% mais comida e mais esferas
 const MIN_BOOST = 20, GELO_R = 620, IMA_R = 240, MAX_SEG = 260, BOOST_DROP_V = 2.25;
-const TICK_MS = 25, SEND_EVERY = 1;               // simulação e envio a 40 Hz
+const TICK_MS = 25, SEND_EVERY = 1, MENU_EVERY = 4;   // no menu: 10 por segundo               // simulação e envio a 40 Hz
 const DROP_TTL = 110, ORB_DELAY = 1.5, MAX_PLAYERS = 40, MAX_DROPS = 2500, MAX_ROOMS = 200;
 const POWER_DUR = { ima: 10, turbo: 6, serra: 7, gelo: 6, dobro: 12, fogo: 10, lento: 6, cego: 6, veneno: 6, inverte: 6 };
 const INV_R = 560, INV_LINGER = 2.5;        // Inversão: quem chega perto fica com os comandos invertidos (e mais 2,5 s depois de sair)
@@ -709,9 +710,23 @@ class Room {
       if (exact) e.push(Math.round(x.lastSpd));
       w.push(e);
     }
-    const msg = JSON.stringify(this.br ? { t: 's', k: this.tick, w, e: this.events, z: Math.round(this.zoneR) } : { t: 's', k: this.tick, w, e: this.events });
+    const z = this.br ? Math.round(this.zoneR) : 0, ev = this.events;
+    const pack = e => JSON.stringify(z ? { t: 's', k: this.tick, w, e, z } : { t: 's', k: this.tick, w, e });
+    let msg = null;
     this.events = [];
-    for (const c of this.clients) c.sendText(msg);
+    // economia de banda: quem não está jogando recebe menos.
+    // aba escondida = nada (volta com o mapa inteiro); menu/fim de partida = 10 por segundo, com os eventos juntados
+    for (const c of this.clients) {
+      const playing = c.worm && c.worm.alive;
+      if (!playing && c.view === 'off') { c.stale = true; c.evq = null; continue; }
+      if (!playing && c.view === 'menu') {
+        if (ev.length) { c.evq = c.evq ? c.evq.concat(ev) : ev.slice(); if (c.evq.length > 4000) { c.stale = true; c.evq = null; } }
+        if (this.tick % MENU_EVERY === 0 && !c.stale) { c.sendText(pack(c.evq || [])); c.evq = null; }
+        continue;
+      }
+      if (c.evq) { c.sendText(pack(c.evq.concat(ev))); c.evq = null; continue; }   // acabou de voltar a jogar: entrega o que juntou
+      c.sendText(msg || (msg = pack(ev)));
+    }
   }
 }
 
@@ -754,6 +769,7 @@ class Client {
     this.open = true; this.lastSeen = Date.now(); this.room = null; this.worm = null;
     this.name = 'Visitante'; this.skin = 'ff7a2fffb347'; this.demon = false; this.pwTries = 0;
     this.chatT = 0; this.chatN = 0; this.chatW = 0;
+    this.view = 'menu'; this.stale = false; this.evq = null;
     this.rateT = Date.now(); this.rateN = 0;
     clients.add(this);
   }
@@ -903,6 +919,12 @@ class Client {
       case 'ab':
         if (this.worm && this.room && typeof m.k === 'string' && this.room.useAbility(this.worm, m.k)) this.send({ t: 'cd', k: m.k, s: ABIL[m.k].cd });
         break;
+      case 'view': {   // o que o jogador está vendo: live (jogando/assistindo), menu, off (aba escondida)
+        const v = m.v === 'live' || m.v === 'off' ? m.v : 'menu';
+        this.view = v;
+        if (v !== 'off' && this.stale && this.room) { this.stale = false; this.evq = null; this.room.sendWelcome(this); if (this.room.chat.length) this.send({ t: 'chatlog', l: this.room.chat }); }
+        break;
+      }
       case 'sync':
         if (this.room) this.room.sendBodies(this);
         break;
@@ -924,7 +946,12 @@ class Client {
 
 /* ================= HTTP ================= */
 let indexHtml = null;
-function loadIndex() { try { indexHtml = fs.readFileSync(path.join(PUBLIC, 'index.html')); } catch (e) { indexHtml = Buffer.from('Minhocaos: falta public/index.html'); } }
+let indexGz = null, indexTag = '';
+function loadIndex() {
+  try { indexHtml = fs.readFileSync(path.join(PUBLIC, 'index.html')); } catch (e) { indexHtml = Buffer.from('Minhocaos: falta public/index.html'); }
+  indexGz = zlib.gzipSync(indexHtml, { level: 9 });                                   // página comprimida (~45% do tamanho)
+  indexTag = '"' + crypto.createHash('sha1').update(indexHtml).digest('base64').slice(0, 20) + '"';   // quem já tem esta versão recebe só um 304
+}
 loadIndex();
 const server = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
@@ -935,7 +962,10 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/' || url === '/index.html') {
     if (DEV) loadIndex();
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); res.end(indexHtml); return;
+    const head = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', etag: indexTag, vary: 'Accept-Encoding' };
+    if (req.headers['if-none-match'] === indexTag) { res.writeHead(304, head); res.end(); return; }
+    if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { head['content-encoding'] = 'gzip'; res.writeHead(200, head); res.end(indexGz); return; }
+    res.writeHead(200, head); res.end(indexHtml); return;
   }
   if (url === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   if (url === '/restricao.png') {

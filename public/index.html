@@ -496,7 +496,7 @@ kbd{display:inline-block;padding:0 6px;border:1px solid var(--line);border-botto
 'use strict';
 
 /* ================= regras (iguais às do servidor) ================= */
-const PROTO = 22;
+const PROTO = 23;
 const TAU = Math.PI * 2, WORLD_R = 3200;
 const BASE_SPEED = 205, BOOST_SPEED = 410, TURBO_SPEED = 480, DEMON_SPEED = 640;
 const FOOD_N = 2520, ORB_N = 36, MAX_SEG = 260, STRIPE = 3, GELO_R = 620, IMA_R = 240;
@@ -1059,7 +1059,7 @@ function onWelcome(m) {
   for (const q of m.worms || []) { const w = wormInfo(q[0], q[1], q[2]); w.pendingPoly = q[3]; }
   for (const q of m.drops || []) addDrop(q[0], q[1], q[2], q[3], q[4], false, q[5]);
   fires.clear(); for (const q of m.fires || []) addFire(q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7]);
-  conn = 'online';
+  conn = 'online'; lastView = '';
   if (state === 'play' || state === 'dead') showMenu();
   renderLobby(true);
 }
@@ -2414,7 +2414,15 @@ function perfTick(raw) {
   const pc = !rtt ? '' : rtt < 70 ? 'ok' : rtt < 140 ? 'mid' : 'bad', fc = fps >= 50 ? 'ok' : fps >= 30 ? 'mid' : 'bad';
   el.perf.innerHTML = `ping <b class="${pc}">${rtt || '–'}</b> ms · <b class="${fc}">${fps}</b> fps`;
 }
+// conta para o servidor o que está na tela, para ele mandar menos dados quando ninguém está jogando
+let lastView = '';
+function syncView() {
+  const v = document.hidden ? 'off' : (state === 'play' || state === 'dead' || state === 'spec') ? 'live' : 'menu';
+  if (v !== lastView && conn === 'online') { lastView = v; send({ t: 'view', v }); }
+}
+document.addEventListener('visibilitychange', syncView);
 function frame(now) {
+  syncView();
   const raw = Math.max(0, (now - last) / 1000), dt = Math.min(.05, raw); last = now;
   perfTick(raw);
   requestAnimationFrame(frame);
