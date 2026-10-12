@@ -1858,7 +1858,6 @@ function render() {
   for (const w of worms.values()) if (w.alive && w.seen && (!topWorm || w.mass > topWorm.mass)) topWorm = w;
   // alguém pegou a coroa do 1º lugar: pisca o cupom por 2 s para todo mundo que está jogando
   if (topWorm && topWorm.id !== crownId) {
-    if (topWorm === me && state === 'play' && time - promoT > 3) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
     crownId = topWorm.id;
   }
   for (const w of worms.values()) if (w.alive && w.seen && w !== me) drawWorm(w);
@@ -2043,6 +2042,8 @@ function updateBoard() {
     el.rank.textContent = brOn ? `Battle Royale · ${br.alive || alive.length} vivos · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}` : `${myRank > 0 ? myRank : '–'}º de ${alive.length} · ${me.kills} ${me.kills === 1 ? 'abate' : 'abates'}`;
     if (myRank > 0) stats.bestRank = Math.min(stats.bestRank, myRank);
     if (myRank === 1 && lastRank !== 1 && alive.length > 1 && time - kingT > 8) { kingT = time; flash('Native King', '#ffd23f'); }
+    // cupom secreto: aparece para quem acabou de chegar ao 1º lugar do placar
+    if (myRank === 1 && lastRank !== 1 && state === 'play' && time - promoT > 3) { promoT = time; const pr = $('#promo'); pr.classList.remove('go'); void pr.offsetWidth; pr.classList.add('go'); }
     lastRank = myRank;
   }
   const n = othersOnline().length;
