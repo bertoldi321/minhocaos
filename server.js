@@ -102,7 +102,7 @@ function banLeft(c) {
 }
 function banDemon(c) { const u = Date.now() + DEMON_BAN_MS; if (c.dev) demonBans.set('d:' + c.dev, u); if (c.ip) demonBans.set('i:' + c.ip, u); }
 const VTURB_SK = 'ee492cf0234af20051', DIRECT_SK = '1fa1cdfa4e51', KASH_SK = '34c4661f8a47f5c518';   // peles com poderes (grátis)
-const SLASH_SK = '141416d9d9d6', SLASH_CUT = .2;
+const SLASH_SK = '141416d9d9d6', SLASH_CUT = .4;   // laser da KashPay: rouba 40% do tamanho de quem acerta
 const BID_SK = 'ff149ac2006b', BID_EVERY = 10;   // Campanha de BID: a cada 10 s cresce 5× ou encolhe 5×, na sorte   // Slash: laser que tira 20% do tamanho de quem acerta
 const KASH_EAT = 1.5, KASH_COINS = 20, COIN_R = 20;   // KashPay: tudo o que come vale 1,5×; Shift solta moedas
 // chat: tira caracteres invisíveis, junta espaços, no máximo 120 letras
@@ -696,7 +696,8 @@ class Room {
     for (const [o, i] of hits) {
       if (!o.alive) continue;
       if (slash) {   // Slash: não mata, encolhe 20% e a tela de quem foi atingido pisca em vermelho
-        o.mass = Math.max(14, o.mass * (1 - SLASH_CUT)); o.hurtT = 3;   // fica avermelhada por 3 s
+        const before = o.mass; o.mass = Math.max(14, o.mass * (1 - SLASH_CUT)); o.hurtT = 3;   // fica avermelhada por 3 s
+        w.mass = Math.min(MAX_MASS, w.mass + (before - o.mass));   // e quem atirou cresce o que roubou
         if (o.client) o.client.send({ t: 'slashed', by: w.name });
       } else if (i <= 2) this.kill(o, w, 'laser'); else this.cut(o, i, w, 'laser');
     }

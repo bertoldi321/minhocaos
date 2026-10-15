@@ -553,7 +553,7 @@ const SKINS = [
   { name: 'Cabeção',  c: ['#c49a6c', '#2b261b'], face: true },
   // peles com poderes (grátis)
   { name: 'VTURB',      c: ['#ee492c', '#f0234a', '#f20051'], logo: 'vt', power: 'Anda 1,5× mais rápido que os outros e acelera 3× mais rápido (clique ou Espaço).' },
-  { name: 'KashPay',    c: ['#34c466', '#1f8a47', '#f5c518'], logo: 'kp', power: 'Tecla 1 dispara um laser que tira 20% do tamanho de quem acertar (recarga de 6 s).' },
+  { name: 'KashPay',    c: ['#34c466', '#1f8a47', '#f5c518'], logo: 'kp', power: 'Tecla 1 dispara um laser que rouba 40% do tamanho de quem acertar: o inimigo encolhe e você cresce o que roubou (recarga de 6 s).' },
   { name: 'Slash',      c: ['#141416', '#d9d9d6'],            logo: 'sl', power: 'Tecla 1 solta um monte de moedas em volta. Tudo o que come vale 1,5×, somando com o Dobro.' },
   { name: 'UP',          c: ['#14110d', '#c9a14a'],            logo: 'up', power: 'Tecla 1 rouba ao mesmo tempo os poderes bons de todo mundo na toca e fica com eles por 20 s (recarga de 30 s).' },
   { name: 'Full Stack',  c: ['#c2542f', '#f4f4f4'],            logo: 'fs', power: 'Tecla 1 liga um escudo por 3 s: você atravessa o corpo dos outros, fogo e serra (recarga de 15 s).' },
@@ -1175,7 +1175,7 @@ function onMessage(m) {
     case 'chat': addChat(m); break;
     case 'emo': { const w = worms.get(m.w); if (w && EMOS[m.e]) { w.emo = EMOS[m.e]; w.emoS = performance.now() / 1000; } break; }
     case 'reset': if (state !== 'menu') showMenu(); toast('O jogo foi <b>reiniciado</b>', '#ffd23f'); break;
-    case 'slashed': if (state === 'play') { toast(`O laser do <b>${esc(cleanName(m.by))}</b> tirou 20% do seu tamanho`, '#ff3b1a'); sfx('bad'); const h = $('#hurt'); h.classList.remove('go'); void h.offsetWidth; h.classList.add('go'); } break;
+    case 'slashed': if (state === 'play') { toast(`O laser do <b>${esc(cleanName(m.by))}</b> roubou 40% do seu tamanho`, '#ff3b1a'); sfx('bad'); const h = $('#hurt'); h.classList.remove('go'); void h.offsetWidth; h.classList.add('go'); } break;
     case 'br': onBr(m); break;
     case 'chatlog': chatEl.log.innerHTML = ''; for (const q of Array.isArray(m.l) ? m.l : []) addChat(q, true); break;
     case 'pups': toast(`<b>${m.n | 0} ${m.n === 1 ? 'filhote nasceu' : 'filhotes nasceram'}</b>: eles não te machucam`, '#1fa1cd'); sfx('power'); break;
@@ -2120,7 +2120,7 @@ function startPlaying() {
   if (!classic && sel.lock && demonPw && demonTier === 'limited') toast('Senha com recarga: se morrer, a pele Demônio fica <b>10 min</b> bloqueada', '#ff3b1a');
   else if (sel.logo === 'vt') toast('VTURB: anda <b>1,5×</b> mais rápido e acelera <b>3×</b>', '#f20051');
   else if (sel.logo === 'sl') toast(coarse ? 'Slash: botão à esquerda solta moedas · come 1,5×' : 'Slash: <b>1</b> solta moedas · tudo vale <b>1,5×</b>', '#34c466');
-  else if (sel.logo === 'kp') toast(coarse ? 'KashPay: botão à esquerda dispara o laser' : 'KashPay: <b>1</b> dispara o laser que tira <b>20%</b>', '#9fe8ff');
+  else if (sel.logo === 'kp') toast(coarse ? 'KashPay: botão à esquerda dispara o laser' : 'KashPay: <b>1</b> dispara o laser que rouba <b>40%</b>', '#9fe8ff');
   else if (sel.logo === 'da') toast('Direct Ads: a cada <b>1.000</b> pontos nascem 2 filhotes', '#1fa1cd');
   updateBoard();
 }
@@ -2257,7 +2257,7 @@ function updateKeysHint() {
               : '<kbd>1</kbd> laser · <kbd>2</kbd> fogo azul · <kbd>3</kbd> boost 3× · <kbd>4</kbd> triplicar · segure <kbd>5</kbd> serra · segure <kbd>6</kbd> turbo')
     : sel.logo === 'vt' ? 'anda 1,5× mais rápido e acelera 3× mais rápido que os outros.'
     : sel.logo === 'sl' ? (coarse ? 'o botão à esquerda solta um monte de moedas; tudo o que come vale 1,5×.' : '<kbd>1</kbd> solta um monte de moedas (recarga de 18 s) · tudo o que come vale 1,5×')
-    : sel.logo === 'kp' ? (coarse ? 'o botão à esquerda dispara o laser que tira 20% do tamanho de quem acertar.' : '<kbd>1</kbd> dispara o laser que tira 20% do tamanho de quem acertar (recarga de 6 s)')
+    : sel.logo === 'kp' ? (coarse ? 'o botão à esquerda dispara o laser que rouba 40% do tamanho de quem acertar.' : '<kbd>1</kbd> dispara o laser que rouba 40% do tamanho de quem acertar e você cresce o que roubou (recarga de 6 s)')
     : sel.logo === 'da' ? 'a cada 1.000 pontos nascem 2 filhotes que te ajudam.' : '';
   const name = demon ? 'Demônio' : sel.name;
   $('#keysHint').innerHTML = (coarse
